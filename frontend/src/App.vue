@@ -772,6 +772,99 @@ const moveCandidate = (candidateId, newStatus) => {
   }
 };
 
+// Recruiter filters & advanced metrics
+const selectedDashboardRecruiter = ref('todos');
+const selectedDashboardLevel = ref('todos');
+const selectedDashboardDept = ref('todos');
+
+const recruiterOptions = [
+  { value: 'todos', label: 'Todos os Recrutadores' },
+  { value: 'ana', label: 'Ana Clara (Tech)' },
+  { value: 'pedro', label: 'Pedro Souza (Comercial)' },
+  { value: 'mariana', label: 'Mariana Dias (Design)' }
+];
+
+const levelOptions = [
+  { value: 'todos', label: 'Todos os Níveis' },
+  { value: 'junior', label: 'Júnior' },
+  { value: 'pleno', label: 'Pleno' },
+  { value: 'senior', label: 'Sênior' }
+];
+
+const deptOptions = [
+  { value: 'todos', label: 'Todos os Setores' },
+  { value: 'tecnologia', label: 'Tecnologia' },
+  { value: 'vendas', label: 'Vendas' },
+  { value: 'design', label: 'Design' }
+];
+
+// Simulated data points that react to the filters
+const dashboardMetrics = computed(() => {
+  let seed = 1.0;
+  if (selectedDashboardRecruiter.value === 'ana') seed *= 0.85;
+  if (selectedDashboardRecruiter.value === 'pedro') seed *= 1.15;
+  if (selectedDashboardRecruiter.value === 'mariana') seed *= 0.95;
+  
+  if (selectedDashboardLevel.value === 'junior') seed *= 0.7;
+  if (selectedDashboardLevel.value === 'senior') seed *= 1.3;
+  
+  if (selectedDashboardDept.value === 'vendas') seed *= 1.1;
+  if (selectedDashboardDept.value === 'design') seed *= 0.9;
+
+  const abertas = Math.round(8 * seed);
+  const emAndamento = Math.round(5 * seed);
+  const fechadas = Math.round(12 * seed);
+  
+  const triados = Math.round(150 * seed);
+  const emAnalise = Math.round(65 * seed);
+  const entrevistados = Math.round(22 * seed);
+  const aprovados = Math.round(4 * seed);
+  
+  let sla = 18.5;
+  if (selectedDashboardLevel.value === 'senior') sla = 29.2;
+  if (selectedDashboardLevel.value === 'junior') sla = 12.4;
+  if (selectedDashboardRecruiter.value === 'ana') sla = 16.1;
+  
+  let nps = 92;
+  if (selectedDashboardRecruiter.value === 'pedro') nps = 87;
+  if (selectedDashboardRecruiter.value === 'mariana') nps = 95;
+  
+  let responseTime = 1.8;
+  if (selectedDashboardRecruiter.value === 'pedro') responseTime = 2.4;
+  if (selectedDashboardRecruiter.value === 'ana') responseTime = 1.3;
+
+  let linkedinPct = 65;
+  let indicacaoPct = 20;
+  let portaisPct = 10;
+  let outrosPct = 5;
+  if (selectedDashboardDept.value === 'tecnologia') {
+    linkedinPct = 75;
+    indicacaoPct = 15;
+  } else if (selectedDashboardDept.value === 'vendas') {
+    linkedinPct = 50;
+    portaisPct = 30;
+  }
+
+  return {
+    abertas,
+    emAndamento,
+    fechadas,
+    triados,
+    emAnalise,
+    entrevistados,
+    aprovados,
+    sla: sla.toFixed(1),
+    nps,
+    responseTime: responseTime.toFixed(1),
+    channels: {
+      linkedin: linkedinPct,
+      indicacao: indicacaoPct,
+      portais: portaisPct,
+      outros: outrosPct
+    }
+  };
+});
+
 const handlePublishJob = async (e) => {
   if (e) e.preventDefault();
   if (!newJobForm.value.title || !newJobForm.value.company) {
@@ -2896,27 +2989,209 @@ const sendMeetMessage = () => {
         <!-- ── Aba Recrutador Dashboard (Recrutador) ── -->
         <template v-if="activeTab === 'recruiter_dashboard'">
           <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
-            <!-- Recruiter stats telemetry -->
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem;">
-              <div class="glass-card stat-card">
-                <div class="stat-icon"><i class="fa-solid fa-briefcase"></i></div>
-                <div>
-                  <div class="stat-value">{{ publishedJobs.length }}</div>
-                  <div class="stat-label">Minhas Vagas Publicadas</div>
+            <!-- Filtros de Desempenho -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 1rem; border-color: rgba(59,130,246,0.25);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-filter" style="color: var(--color-secondary);"></i>
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Painel Analítico de Recrutamento</h3>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.78rem; margin-bottom: 0.35rem; color: var(--text-secondary);">Recrutador Responsável</label>
+                  <select class="form-input" v-model="selectedDashboardRecruiter" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); font-size: 0.85rem; padding: 0.4rem 0.6rem; width: 100%; border-radius: 6px;">
+                    <option v-for="opt in recruiterOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.78rem; margin-bottom: 0.35rem; color: var(--text-secondary);">Nível da Vaga</label>
+                  <select class="form-input" v-model="selectedDashboardLevel" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); font-size: 0.85rem; padding: 0.4rem 0.6rem; width: 100%; border-radius: 6px;">
+                    <option v-for="opt in levelOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.78rem; margin-bottom: 0.35rem; color: var(--text-secondary);">Setor</label>
+                  <select class="form-input" v-model="selectedDashboardDept" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); font-size: 0.85rem; padding: 0.4rem 0.6rem; width: 100%; border-radius: 6px;">
+                    <option v-for="opt in deptOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
                 </div>
               </div>
-              <div class="glass-card stat-card">
-                <div class="stat-icon"><i class="fa-solid fa-users" style="color: #a855f7;"></i></div>
-                <div>
-                  <div class="stat-value">{{ recruitedCandidates.length }}</div>
-                  <div class="stat-label">Candidatos no Pipeline</div>
+            </div>
+
+            <!-- Principais Indicadores (Gestão de Vagas, SLA, Experiência) -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem;">
+              <!-- Gestão de Vagas -->
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                  <span class="stat-label" style="font-weight: 700; color: #fff;">Gestão de Vagas</span>
+                  <i class="fa-solid fa-folder-open" style="color: var(--color-primary);"></i>
+                </div>
+                <div style="display: flex; gap: 0.8rem; margin-top: 0.25rem; font-size: 0.82rem; width: 100%;">
+                  <div style="flex: 1; text-align: center; background: rgba(59,130,246,0.1); padding: 4px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.25);">
+                    <div style="font-size: 1.1rem; font-weight: 800; color: var(--color-primary);">{{ dashboardMetrics.abertas }}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-secondary);">Abertas</div>
+                  </div>
+                  <div style="flex: 1; text-align: center; background: rgba(0,242,254,0.1); padding: 4px; border-radius: 4px; border: 1px solid rgba(0,242,254,0.25);">
+                    <div style="font-size: 1.1rem; font-weight: 800; color: var(--color-secondary);">{{ dashboardMetrics.emAndamento }}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-secondary);">Em Fila</div>
+                  </div>
+                  <div style="flex: 1; text-align: center; background: rgba(16,185,129,0.1); padding: 4px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.25);">
+                    <div style="font-size: 1.1rem; font-weight: 800; color: var(--color-success);">{{ dashboardMetrics.fechadas }}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-secondary);">Fechadas</div>
+                  </div>
                 </div>
               </div>
-              <div class="glass-card stat-card">
-                <div class="stat-icon"><i class="fa-solid fa-crown" style="color: #10b981;"></i></div>
-                <div>
-                  <div class="stat-value">{{ isRecruiterPro ? 'Recrutador Pro' : 'Gratuito' }}</div>
-                  <div class="stat-label">Status do Plano</div>
+
+              <!-- SLA de Contratação -->
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                  <span class="stat-label" style="font-weight: 700; color: #fff;">SLA Médio</span>
+                  <i class="fa-solid fa-hourglass-half" style="color: #f59e0b;"></i>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                  <span class="stat-value" style="font-size: 1.8rem; color: #f59e0b; font-weight: 800;">{{ dashboardMetrics.sla }}</span>
+                  <span style="font-size: 0.75rem; color: var(--text-secondary);">dias</span>
+                </div>
+                <div style="font-size: 0.68rem; color: var(--color-success); font-weight: 600; display: flex; align-items: center; gap: 3px;">
+                  <i class="fa-solid fa-circle-check"></i> Dentro da Meta
+                </div>
+              </div>
+
+              <!-- Satisfação Candidato (NPS) -->
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                  <span class="stat-label" style="font-weight: 700; color: #fff;">Satisfação (NPS)</span>
+                  <i class="fa-solid fa-heart" style="color: #ec4899;"></i>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                  <span class="stat-value" style="font-size: 1.8rem; color: #ec4899; font-weight: 800;">{{ dashboardMetrics.nps }}%</span>
+                </div>
+                <div style="font-size: 0.68rem; color: var(--text-secondary);">
+                  Feedback da Experiência
+                </div>
+              </div>
+
+              <!-- Velocidade de Resposta -->
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+                <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                  <span class="stat-label" style="font-weight: 700; color: #fff;">Tempo de Resposta</span>
+                  <i class="fa-solid fa-reply-all" style="color: var(--color-secondary);"></i>
+                </div>
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                  <span class="stat-value" style="font-size: 1.8rem; color: var(--color-secondary); font-weight: 800;">{{ dashboardMetrics.responseTime }}</span>
+                  <span style="font-size: 0.75rem; color: var(--text-secondary);">dias</span>
+                </div>
+                <div style="font-size: 0.68rem; color: var(--color-secondary); font-weight: 600; display: flex; align-items: center; gap: 3px;">
+                  <i class="fa-solid fa-bolt"></i> Super Rápido
+                </div>
+              </div>
+            </div>
+
+            <!-- Funil e Origem do Talento Side-by-Side -->
+            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem;">
+              <!-- Funil de Candidatos -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <h3 class="section-title" style="margin: 0;"><i class="fa-solid fa-chart-bar"></i> Funil de Candidatos (Tempo Real)</h3>
+                  <span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(59,130,246,0.15); color: var(--color-primary); font-weight: 600;">
+                    Taxa total: {{ ((dashboardMetrics.aprovados / dashboardMetrics.triados) * 100).toFixed(1) }}%
+                  </span>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0;">
+                  <!-- FASE 1: Triados -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600;">
+                      <span>1. Currículos Triados por IA</span>
+                      <span style="color: #fff;">{{ dashboardMetrics.triados }} (100%)</span>
+                    </div>
+                    <div style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden;">
+                      <div style="height: 100%; width: 100%; background: linear-gradient(90deg, #3b82f6, #00f2fe); border-radius: 5px; transition: width 0.4s ease;"></div>
+                    </div>
+                  </div>
+
+                  <!-- FASE 2: Analise -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600;">
+                      <span>2. Selecionados para Análise Técnica</span>
+                      <span style="color: var(--color-secondary);">{{ dashboardMetrics.emAnalise }} ({{ ((dashboardMetrics.emAnalise / dashboardMetrics.triados) * 100).toFixed(0) }}%)</span>
+                    </div>
+                    <div style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${((dashboardMetrics.emAnalise / dashboardMetrics.triados) * 100)}%; background: linear-gradient(90deg, #00f2fe, #10b981); border-radius: 5px; transition: width 0.4s ease;`"></div>
+                    </div>
+                  </div>
+
+                  <!-- FASE 3: Entrevista -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600;">
+                      <span>3. Entrevistas Agendadas</span>
+                      <span style="color: #a855f7;">{{ dashboardMetrics.entrevistados }} ({{ ((dashboardMetrics.entrevistados / dashboardMetrics.triados) * 100).toFixed(0) }}%)</span>
+                    </div>
+                    <div style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${((dashboardMetrics.entrevistados / dashboardMetrics.triados) * 100)}%; background: linear-gradient(90deg, #a855f7, #ec4899); border-radius: 5px; transition: width 0.4s ease;`"></div>
+                    </div>
+                  </div>
+
+                  <!-- FASE 4: Aprovados -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem; font-weight: 600;">
+                      <span>4. Aprovados / Propostas Enviadas</span>
+                      <span style="color: var(--color-success);">{{ dashboardMetrics.aprovados }} ({{ ((dashboardMetrics.aprovados / dashboardMetrics.triados) * 100).toFixed(1) }}%)</span>
+                    </div>
+                    <div style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${((dashboardMetrics.aprovados / dashboardMetrics.triados) * 100)}%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 5px; transition: width 0.4s ease;`"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Origem do Talento -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 class="section-title"><i class="fa-solid fa-share-nodes"></i> Origem dos Talentos Qualificados</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                  <!-- LinkedIn -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.2rem;">
+                      <span style="display: flex; align-items: center; gap: 4px;"><i class="fa-brands fa-linkedin" style="color: #0a66c2;"></i> LinkedIn</span>
+                      <span style="font-weight: 700; color: #fff;">{{ dashboardMetrics.channels.linkedin }}%</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${dashboardMetrics.channels.linkedin}%; background: #0a66c2; border-radius: 3px;`"></div>
+                    </div>
+                  </div>
+
+                  <!-- Indicações -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.2rem;">
+                      <span style="display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-users" style="color: #10b981;"></i> Indicações Internas</span>
+                      <span style="font-weight: 700; color: #fff;">{{ dashboardMetrics.channels.indicacao }}%</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${dashboardMetrics.channels.indicacao}%; background: #10b981; border-radius: 3px;`"></div>
+                    </div>
+                  </div>
+
+                  <!-- Portais de Vaga -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.2rem;">
+                      <span style="display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-globe" style="color: var(--color-secondary);"></i> Portal de Vagas</span>
+                      <span style="font-weight: 700; color: #fff;">{{ dashboardMetrics.channels.portais }}%</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${dashboardMetrics.channels.portais}%; background: var(--color-secondary); border-radius: 3px;`"></div>
+                    </div>
+                  </div>
+
+                  <!-- Outros -->
+                  <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.2rem;">
+                      <span style="display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-ellipsis" style="color: var(--text-muted);"></i> Outros</span>
+                      <span style="font-weight: 700; color: #fff;">{{ dashboardMetrics.channels.outros }}%</span>
+                    </div>
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+                      <div :style="`height: 100%; width: ${dashboardMetrics.channels.outros}%; background: var(--text-muted); border-radius: 3px;`"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
