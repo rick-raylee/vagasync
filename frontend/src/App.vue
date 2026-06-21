@@ -140,9 +140,32 @@ const handleLogin = (e) => {
     showToast('E-mail Inválido', 'Por favor, insira um e-mail no formato correto (exemplo@dominio.com).', 'error');
     return;
   }
+
+  // Auto-detect role based on email or fall back to dropdown selection
+  let role = authForm.value.role || 'candidate';
+  const email = authForm.value.email.trim().toLowerCase();
+  if (email === 'recrutador@vagasync.com') {
+    role = 'recruiter';
+  } else if (email === 'admin@vagasync.com') {
+    role = 'super_admin';
+  } else if (email === 'candidato@vagasync.com') {
+    role = 'candidate';
+  }
+
+  localStorage.setItem('vagasync_role', role);
+  userRole.value = role;
   localStorage.setItem('vagasync_logged', 'true');
   isLoggedIn.value = true;
-  showToast('Acesso Autorizado', 'Bem-vindo de volta ao Vaga Sync!', 'success');
+
+  if (role === 'recruiter') {
+    activeTab.value = 'recruiter_dashboard';
+  } else if (role === 'super_admin') {
+    activeTab.value = 'super_admin';
+  } else {
+    activeTab.value = 'dashboard';
+  }
+
+  showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'}.`, 'success');
 };
 
 const handleSignup = (e) => {
@@ -152,9 +175,32 @@ const handleSignup = (e) => {
     showToast('E-mail Inválido', 'Por favor, insira um e-mail no formato correto (exemplo@dominio.com).', 'error');
     return;
   }
+
+  // Auto-detect role based on email or fall back to dropdown selection
+  let role = authForm.value.role || 'candidate';
+  const email = authForm.value.email.trim().toLowerCase();
+  if (email === 'recrutador@vagasync.com') {
+    role = 'recruiter';
+  } else if (email === 'admin@vagasync.com') {
+    role = 'super_admin';
+  } else if (email === 'candidato@vagasync.com') {
+    role = 'candidate';
+  }
+
+  localStorage.setItem('vagasync_role', role);
+  userRole.value = role;
   localStorage.setItem('vagasync_logged', 'true');
   isLoggedIn.value = true;
-  showToast('Conta Criada!', 'Seu perfil foi sincronizado com sucesso.', 'success');
+
+  if (role === 'recruiter') {
+    activeTab.value = 'recruiter_dashboard';
+  } else if (role === 'super_admin') {
+    activeTab.value = 'super_admin';
+  } else {
+    activeTab.value = 'dashboard';
+  }
+
+  showToast('Conta Criada!', `Seu perfil de ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'} foi configurado.`, 'success');
 };
 
 const handleLogout = () => {
