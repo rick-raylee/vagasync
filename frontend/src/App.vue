@@ -1382,8 +1382,11 @@ const candidateAnalyses = {
   }
 };
 
+const cvTab = ref('text'); // 'text' or 'pdf'
+
 const openCandidateModal = (cand) => {
   selectedCandidateForModal.value = { ...cand, analysis: null };
+  cvTab.value = 'text';
   showCandidateModal.value = true;
 };
 
@@ -1458,15 +1461,117 @@ const restoreCandidate = () => {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
           <!-- Lado Esquerdo: Visualização do Currículo -->
           <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <h4 style="margin: 0; font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 6px;">
-              <i class="fa-solid fa-file-invoice" style="color: var(--color-secondary);"></i> Currículo do Candidato
-            </h4>
-            <textarea 
-              class="form-input" 
-              rows="14" 
-              style="font-size: 0.85rem; line-height: 1.5; background: #0d1426; border-color: var(--border-color); color: var(--text-primary); resize: none; width: 100%; border-radius: 6px; padding: 0.75rem;" 
-              v-model="selectedCandidateForModal.resume"
-            ></textarea>
+            <!-- Tabs Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.25rem;">
+              <div style="display: flex; gap: 0.5rem;">
+                <button 
+                  type="button"
+                  :class="['btn', cvTab === 'text' ? 'btn-primary' : 'btn-secondary']" 
+                  style="font-size: 0.75rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border-color);"
+                  @click="cvTab = 'text'"
+                >
+                  <i class="fa-solid fa-file-lines"></i> Texto Extraído
+                </button>
+                <button 
+                  type="button"
+                  :class="['btn', cvTab === 'pdf' ? 'btn-primary' : 'btn-secondary']" 
+                  style="font-size: 0.75rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border-color);"
+                  @click="cvTab = 'pdf'"
+                >
+                  <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Versão Anexa (PDF)
+                </button>
+              </div>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Visualização do Arquivo</span>
+            </div>
+
+            <!-- Tab 1: Texto Extraído -->
+            <div v-if="cvTab === 'text'" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <textarea 
+                class="form-input" 
+                rows="14" 
+                style="font-size: 0.85rem; line-height: 1.5; background: #0d1426; border-color: var(--border-color); color: var(--text-primary); resize: none; width: 100%; border-radius: 6px; padding: 0.75rem;" 
+                v-model="selectedCandidateForModal.resume"
+              ></textarea>
+            </div>
+
+            <!-- Tab 2: Versão Anexa (PDF) -->
+            <div v-else style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- PDF Viewer Toolbar -->
+              <div style="display: flex; justify-content: space-between; align-items: center; background: #142036; padding: 4px 10px; border-radius: 6px 6px 0 0; border: 1px solid var(--border-color); font-size: 0.75rem;">
+                <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+                  <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i>
+                  curriculo_{{ selectedCandidateForModal.name.toLowerCase().replace(/ /g, '_') }}.pdf
+                </span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.7rem;" disabled><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                  <span style="color: var(--text-muted);">100%</span>
+                  <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.7rem;" disabled><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                  <span style="border-left: 1px solid var(--border-color); height: 12px; margin: 0 4px;"></span>
+                  <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.7rem;" @click="showToast('Imprimir', 'Simulando envio para impressora...', 'success')"><i class="fa-solid fa-print"></i></button>
+                  <button type="button" class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.7rem;" @click="showToast('Download', 'Download do PDF iniciado com sucesso.', 'success')"><i class="fa-solid fa-download"></i></button>
+                </div>
+              </div>
+
+              <!-- PDF Simulated Document -->
+              <div style="max-height: 380px; overflow-y: auto; background: #070a13; padding: 1.5rem 1rem; border-radius: 0 0 6px 6px; border: 1px solid var(--border-color); border-top: none; display: flex; justify-content: center;">
+                <div style="background: white; color: #1e293b; width: 100%; max-width: 500px; padding: 2.5rem 2rem; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.75rem; text-align: left; line-height: 1.4; color: #334155; min-height: 550px;">
+                  <!-- CV Header -->
+                  <div style="text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 1rem; margin-bottom: 1.25rem;">
+                    <h2 style="margin: 0; font-size: 1.4rem; color: #1e293b; font-weight: 700;">{{ selectedCandidateForModal.name }}</h2>
+                    <p style="margin: 0.25rem 0 0 0; color: #64748b; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">{{ selectedCandidateForModal.role }}</p>
+                    <div style="margin-top: 0.5rem; font-size: 0.7rem; color: #64748b; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
+                      <span>📧 {{ selectedCandidateForModal.email }}</span>
+                      <span>•</span>
+                      <span>📱 (11) 98765-4321</span>
+                      <span>•</span>
+                      <span>📍 São Paulo, SP</span>
+                    </div>
+                  </div>
+
+                  <!-- CV Summary -->
+                  <div style="margin-bottom: 1.25rem;">
+                    <h3 style="margin: 0 0 0.4rem 0; font-size: 0.85rem; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Resumo Profissional</h3>
+                    <p style="margin: 0; color: #475569; text-align: justify;">{{ selectedCandidateForModal.resume }}</p>
+                  </div>
+
+                  <!-- CV Experience -->
+                  <div style="margin-bottom: 1.25rem;">
+                    <h3 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Histórico de Experiência</h3>
+                    <div style="margin-bottom: 0.75rem;">
+                      <div style="display: flex; justify-content: space-between; font-weight: 700; color: #1e293b;">
+                        <span>Desenvolvedor de Software Sênior</span>
+                        <span style="color: #64748b; font-weight: 600;">2024 - Presente</span>
+                      </div>
+                      <div style="font-style: italic; color: #64748b; margin-bottom: 0.25rem;">VagaSync Corp / Tech Solutions</div>
+                      <p style="margin: 0; color: #475569; text-align: justify;">
+                        Responsável pelo desenvolvimento de aplicações e APIs focadas em inteligência artificial. Manutenção e refatoração de código legado utilizando arquiteturas modernas de microsserviços. Otimização de performance de renderização no lado do cliente.
+                      </p>
+                    </div>
+                    <div>
+                      <div style="display: flex; justify-content: space-between; font-weight: 700; color: #1e293b;">
+                        <span>Desenvolvedor Pleno</span>
+                        <span style="color: #64748b; font-weight: 600;">2021 - 2024</span>
+                      </div>
+                      <div style="font-style: italic; color: #64748b; margin-bottom: 0.25rem;">Global Tech Enterprise</div>
+                      <p style="margin: 0; color: #475569; text-align: justify;">
+                        Atuação em squads ágeis focadas no desenvolvimento de produtos web e mobile. Integrações com múltiplos gateways de pagamento e plataformas de mensagens.
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- CV Education -->
+                  <div>
+                    <h3 style="margin: 0 0 0.4rem 0; font-size: 0.85rem; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px;">Educação & Competências</h3>
+                    <div style="margin-bottom: 0.5rem;">
+                      <strong style="color: #1e293b;">Bacharelado em Ciência da Computação</strong> — Universidade Metropolitana (Concluído em 2020)
+                    </div>
+                    <p style="margin: 0; color: #475569;">
+                      <strong>Habilidades Técnicas:</strong> JavaScript, TypeScript, Vue.js, React, Node.js, Python, SQL, REST APIs, GIT, Docker.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Lado Direito: Análise de IA do Agente -->
