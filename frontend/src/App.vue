@@ -1514,7 +1514,7 @@ const restoreCandidate = () => {
 
               <!-- PDF Simulated Document -->
               <div style="max-height: 380px; overflow-y: auto; background: #070a13; padding: 1.5rem 1rem; border-radius: 0 0 6px 6px; border: 1px solid var(--border-color); border-top: none; display: flex; justify-content: center;">
-                <div style="background: white; color: #1e293b; width: 100%; max-width: 500px; padding: 2.5rem 2rem; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.75rem; text-align: left; line-height: 1.4; color: #334155; min-height: 550px;">
+                <div style="background: white; color: #1e293b; width: 100%; max-width: 500px; padding: 2.5rem 2rem; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.6); font-family: 'Outfit', 'Inter', sans-serif; font-size: 0.75rem; text-align: left; line-height: 1.4; color: #334155; min-height: 550px; flex-shrink: 0;">
                   <!-- CV Header -->
                   <div style="text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 1rem; margin-bottom: 1.25rem;">
                     <h2 style="margin: 0; font-size: 1.4rem; color: #1e293b; font-weight: 700;">{{ selectedCandidateForModal.name }}</h2>
