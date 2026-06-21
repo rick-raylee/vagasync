@@ -130,8 +130,35 @@ const isLoggedIn = ref(localStorage.getItem('vagasync_logged') === 'true');
 const authMode = ref('login'); // 'login' or 'signup'
 const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
 const userRole = ref(localStorage.getItem('vagasync_role') || 'candidate');
-const isPremium = ref(localStorage.getItem('vagasync_premium') === 'true');
-const isRecruiterPro = ref(localStorage.getItem('vagasync_recruiter_pro') === 'true');
+const userFeatures = ref(JSON.parse(localStorage.getItem('vagasync_features')) || {
+  impulsionar_vaga_credits: 0,
+  empresa_destaque: false,
+  ia_triagem: false,
+  videoentrevistas: false,
+  relatorios_premium: false,
+  testes_tecnicos: false,
+  curriculo_destaque: false,
+  ia_ilimitada: false,
+  score_empregabilidade: false,
+  perfil_premium: false
+});
+
+watch(userFeatures, (val) => {
+  localStorage.setItem('vagasync_features', JSON.stringify(val));
+}, { deep: true });
+
+const isPremium = computed({
+  get: () => userFeatures.value.ia_ilimitada,
+  set: (val) => { userFeatures.value.ia_ilimitada = val; }
+});
+
+const isRecruiterPro = computed({
+  get: () => userFeatures.value.ia_triagem || userFeatures.value.videoentrevistas,
+  set: (val) => {
+    userFeatures.value.ia_triagem = val;
+    userFeatures.value.videoentrevistas = val;
+  }
+});
 
 const handleLogin = (e) => {
   e.preventDefault();
@@ -703,8 +730,13 @@ const checkoutPaymentMethod = ref('pix');
 const checkoutCard = ref({ number: '', expiry: '', cvc: '', name: '' });
 const pixCopied = ref(false);
 
-const openCheckout = (plan) => {
+const checkoutTitle = ref('Upgrade Premium');
+const checkoutPrice = ref('R$ 29,90/mês');
+
+const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') => {
   checkoutPlan.value = plan;
+  checkoutTitle.value = title;
+  checkoutPrice.value = price;
   checkoutOpen.value = true;
 };
 
@@ -717,26 +749,37 @@ const handleCheckoutPayment = () => {
   }
   
   if (checkoutPlan.value === 'candidate_premium') {
-    isPremium.value = true;
+    userFeatures.value.ia_ilimitada = true;
     localStorage.setItem('vagasync_premium', 'true');
     showToast('Plano Premium Ativado!', 'Parabéns! Você agora tem acesso ilimitado aos recursos de IA.', 'success');
-  } else {
-    isRecruiterPro.value = true;
+  } else if (checkoutPlan.value === 'recruiter_pro') {
+    userFeatures.value.ia_triagem = true;
+    userFeatures.value.videoentrevistas = true;
     localStorage.setItem('vagasync_recruiter_pro', 'true');
     showToast('Plano Recrutador Pro Ativado!', 'Parabéns! Suas ferramentas de recrutamento ilimitadas e Meet foram liberados.', 'success');
+  } else if (checkoutPlan.value === 'impulsionar_vaga') {
+    userFeatures.value.impulsionar_vaga_credits += 1;
+    showToast('Crédito Adicionado!', 'Parabéns! Você adquiriu 1 crédito para impulsionar vaga.', 'success');
+  } else if (checkoutPlan.value) {
+    userFeatures.value[checkoutPlan.value] = true;
+    showToast('Recurso Ativado!', `Parabéns! O recurso "${checkoutTitle.value}" foi liberado com sucesso.`, 'success');
   }
   checkoutOpen.value = false;
 };
 
 const cancelPremium = (plan) => {
   if (plan === 'candidate_premium') {
-    isPremium.value = false;
+    userFeatures.value.ia_ilimitada = false;
     localStorage.setItem('vagasync_premium', 'false');
     showToast('Plano Cancelado', 'Você retornou ao Plano Gratuito.', 'info');
-  } else {
-    isRecruiterPro.value = false;
+  } else if (plan === 'recruiter_pro') {
+    userFeatures.value.ia_triagem = false;
+    userFeatures.value.videoentrevistas = false;
     localStorage.setItem('vagasync_recruiter_pro', 'false');
     showToast('Plano Cancelado', 'Você retornou ao Plano Gratuito de Recrutador.', 'info');
+  } else if (plan) {
+    userFeatures.value[plan] = false;
+    showToast('Recurso Desativado', `O recurso "${plan}" foi cancelado.`, 'info');
   }
 };
 
@@ -1481,7 +1524,7 @@ const restoreCandidate = () => {
                   <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Versão Anexa (PDF)
                 </button>
               </div>
-              <span style="font-size: 0.72rem; color: var(--text-muted);">Visualização do Arquivo</span>
+              <i class="fa-solid fa-eye" style="color: var(--text-muted); font-size: 0.85rem; padding-right: 0.25rem;" title="Visualização do Arquivo"></i>
             </div>
 
             <!-- Tab 1: Texto Extraído -->
@@ -1583,19 +1626,19 @@ const restoreCandidate = () => {
               <span class="match-badge match-high">{{ selectedCandidateForModal.match }}% Match</span>
             </div>
 
-            <!-- Se não for Pro, exibe o bloqueio -->
-            <div v-if="!isRecruiterPro" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; min-height: 250px; padding: 1rem;">
+            <!-- Se não tiver o recurso de IA Triagem, exibe o bloqueio -->
+            <div v-if="!userFeatures.ia_triagem" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; min-height: 250px; padding: 1rem;">
               <i class="fa-solid fa-lock" style="font-size: 2.5rem; color: #f59e0b; opacity: 0.85;"></i>
               <h4 style="margin: 0; color: #fff; font-size: 1.05rem;">🔒 Análise IA Bloqueada</h4>
               <p style="font-size: 0.82rem; color: var(--text-secondary); max-width: 250px; line-height: 1.5;">
-                A análise técnica profunda feita por Inteligência Artificial é exclusiva para assinantes do plano **Recrutador Pro**.
+                A análise técnica profunda feita por Inteligência Artificial é exclusiva para assinantes do recurso **IA Avançada Triagem**.
               </p>
               <button 
                 class="btn btn-primary" 
-                style="background: linear-gradient(135deg, #f59e0b, #ec4899); border: none; color: #fff; font-weight: 700; width: 100%; margin-top: 0.5rem;"
-                @click="openCheckout('recruiter_pro'); showCandidateModal = false;"
+                style="background: linear-gradient(135deg, #00f2fe, #3b82f6); border: none; color: #060913; font-weight: 700; width: 100%; margin-top: 0.5rem;"
+                @click="openCheckout('ia_triagem', 'IA Avançada Triagem', 'R$ 9,90/mês'); showCandidateModal = false;"
               >
-                Assinar Recrutador Pro
+                Ativar IA Avançada (R$ 9,90)
               </button>
             </div>
 
@@ -1695,9 +1738,9 @@ const restoreCandidate = () => {
       display: flex; align-items: center; justify-content: center; z-index: 10000;
     ">
       <div class="glass-card" style="width: 450px; padding: 2rem; border: 1px solid rgba(59, 130, 246, 0.3);">
-        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; text-align: center; color: #00f2fe;">Assinatura VagaSync Premium</h3>
+        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; text-align: center; color: #00f2fe;">{{ checkoutTitle }}</h3>
         <p style="text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-          Liberte buscas e candidaturas ilimitadas por apenas R$ 29,90/mês
+          Ative agora este recurso por apenas {{ checkoutPrice }}
         </p>
 
         <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
@@ -2625,7 +2668,7 @@ const restoreCandidate = () => {
                   </div>
                 </div>
 
-                <div class="timeline-item" :class="{ completed: isPremium }">
+                <div class="timeline-item" :class="{ completed: userFeatures.ia_ilimitada }">
                   <div class="timeline-badge"><i class="fa-solid fa-crown"></i></div>
                   <div class="timeline-panel">
                     <h4>Upgrade Premium SaaS</h4>
@@ -2667,7 +2710,7 @@ const restoreCandidate = () => {
                   </ul>
                   
                   <button 
-                    v-if="isPremium"
+                    v-if="userFeatures.ia_ilimitada"
                     class="btn btn-secondary" 
                     style="width: 100%; margin-top: auto;"
                     @click="cancelPremium('candidate_premium')"
@@ -2678,7 +2721,7 @@ const restoreCandidate = () => {
                     v-else
                     class="btn btn-primary" 
                     style="width: 100%; margin-top: auto; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
-                    @click="openCheckout('candidate_premium')"
+                    @click="openCheckout('candidate_premium', 'Assinatura VagaSync Premium', 'R$ 29,90/mês')"
                   >
                     Assinar Premium
                   </button>
@@ -2792,7 +2835,7 @@ const restoreCandidate = () => {
                 </div>
 
                 <button 
-                  v-if="isPremium"
+                  v-if="userFeatures.ia_ilimitada"
                   class="btn btn-primary" 
                   style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
                   @click="joinVideoMeet"
@@ -3645,7 +3688,7 @@ const restoreCandidate = () => {
                       <!-- Video Meet launcher inside Kanban -->
                       <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem;">
                         <button 
-                          v-if="isRecruiterPro"
+                          v-if="userFeatures.videoentrevistas"
                           class="btn btn-primary" 
                           style="font-size: 0.68rem; padding: 0.3rem; background: linear-gradient(135deg, #10b981, #00f2fe); border: none; color: #060913; font-weight: 700;"
                           @click="joinVideoMeet"
@@ -3746,65 +3789,95 @@ const restoreCandidate = () => {
 
         <!-- ── Aba Recrutador Faturamento (Recrutador) ── -->
         <template v-if="activeTab === 'recruiter_billing'">
-          <div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
-            <!-- Current Plan details -->
-            <div class="glass-card" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(0,242,254,0.3); background: rgba(0,242,254,0.03);">
-              <div>
-                <h3 style="color: var(--color-secondary); font-size: 1.2rem; margin: 0;">
-                  Seu Plano Atual: {{ isRecruiterPro ? 'Recrutador Pro Enterprise' : 'Plano Gratuito de Recrutamento' }}
-                </h3>
-                <p style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.25rem; line-height: 1.5;">
-                  {{ isRecruiterPro 
-                     ? 'Seus limites foram removidos. Banco de talentos e videochamadas WebRTC ilimitadas.' 
-                     : 'Seu limite atual é de 5 vagas cadastradas. Faça o upgrade para remover limites.' }}
-                </p>
-              </div>
-              <button 
-                v-if="isRecruiterPro" 
-                class="btn btn-secondary" 
-                style="color: var(--color-error); border-color: rgba(239,68,68,0.25);"
-                @click="cancelPremium('recruiter_pro')"
-              >
-                Cancelar Assinatura
-              </button>
-              <button 
-                v-else
-                class="btn btn-primary" 
-                style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
-                @click="openCheckout('recruiter_pro')"
-              >
-                Assinar Recrutador Pro
-              </button>
+          <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 3rem;">
+            <div style="text-align: center; margin-bottom: 2rem;">
+              <h2 style="font-size: 2rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-store" style="color: var(--color-secondary);"></i> Loja de Recursos</h2>
+              <p style="color: var(--text-secondary);">Potencialize seu recrutamento com microtransações acessíveis. Pague apenas pelo que usar.</p>
             </div>
-
-            <!-- Recruiter pricing table -->
-            <div class="glass-card">
-              <h3 class="section-title" style="text-align: center; margin-bottom: 1.5rem;">Estruturas de Preços para Recrutadores</h3>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 700px; margin: 0 auto;">
-                <div style="border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; display: flex; flex-direction: column; align-items: center; text-align: center;">
-                  <h4 style="font-size: 1.1rem; color: var(--text-secondary);">Recrutador Básico</h4>
-                  <div style="font-size: 1.75rem; font-weight: 800; margin: 0.5rem 0;">R$ 0</div>
-                  <ul style="list-style:none; padding:0; font-size:0.8rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.5rem;">
-                    <li>✓ 5 vagas cadastradas</li>
-                    <li>✓ Visualização básica de candidatos</li>
-                    <li>✗ Sem videochamada WebRTC</li>
-                  </ul>
-                  <button class="btn btn-secondary" style="width: 100%;" disabled>Ativo</button>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+              
+              <!-- Impulsionar Vaga -->
+              <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-rocket" style="color: #3b82f6;"></i> Impulsionar Vaga</h3>
+                  <span style="font-weight: 800; color: #3b82f6;">R$ 2,99 <small style="font-weight: normal; font-size: 0.7rem;">/vaga</small></span>
                 </div>
-                
-                <div style="border: 2px solid var(--color-primary); padding: 1.5rem; border-radius: 8px; background: rgba(59,130,246,0.03); display: flex; flex-direction: column; align-items: center; text-align: center;">
-                  <h4 style="font-size: 1.1rem; color: #fff;">Recrutador Pro</h4>
-                  <div style="font-size: 1.75rem; font-weight: 800; margin: 0.5rem 0; color: var(--color-secondary);">R$ 149,90<span style="font-size:0.8rem; font-weight:400; color:var(--text-secondary);">/mês</span></div>
-                  <ul style="list-style:none; padding:0; font-size:0.8rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.5rem;">
-                    <li>✓ Vagas publicadas ILIMITADAS</li>
-                    <li>✓ Banco de talentos IA completo</li>
-                    <li>✓ Painel Kanban irrestrito</li>
-                    <li>✓ Salas de Videochamadas WebRTC Meet</li>
-                  </ul>
-                  <button v-if="isRecruiterPro" class="btn btn-secondary" style="width: 100%;" disabled>Já Assinado</button>
-                  <button v-else class="btn btn-primary" style="width:100%;" @click="openCheckout('recruiter_pro')">Assinar Pro</button>
-                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Destaque sua vaga na página inicial e prioridade nas pesquisas.
+                </p>
+                <div style="margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--color-secondary);">Créditos atuais: {{ userFeatures.impulsionar_vaga_credits }}</div>
+                <button class="btn btn-primary" style="width: 100%;" @click="openCheckout('impulsionar_vaga', 'Impulsionar Vaga', 'R$ 2,99')">
+                  Comprar Impulso
+                </button>
               </div>
+
+              <!-- Empresa em Destaque -->
+              <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-building-circle-check" style="color: #10b981;"></i> Empresa Destaque</h3>
+                  <span style="font-weight: 800; color: #10b981;">R$ 4,99 <small style="font-weight: normal; font-size: 0.7rem;">/mês</small></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Selo de destaque e maior credibilidade para sua marca empregadora.
+                </p>
+                <button v-if="userFeatures.empresa_destaque" class="btn btn-secondary" style="width: 100%;" disabled>Ativado</button>
+                <button v-else class="btn btn-primary" style="width: 100%;" @click="openCheckout('empresa_destaque', 'Empresa em Destaque', 'R$ 4,99')">Assinar Recurso</button>
+              </div>
+
+              <!-- IA Avançada para Triagem -->
+              <div class="glass-card" style="display: flex; flex-direction: column; border-color: rgba(0,242,254,0.3); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 10px; right: -25px; background: var(--color-secondary); color: #000; font-size: 0.6rem; font-weight: 900; padding: 2px 30px; transform: rotate(45deg);">POPULAR</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-robot" style="color: var(--color-secondary);"></i> IA Avançada Triagem</h3>
+                  <span style="font-weight: 800; color: var(--color-secondary);">R$ 9,90 <small style="font-weight: normal; font-size: 0.7rem;">/mês</small></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Compatibilidade entre currículo e vaga, ranking automático e sugestões inteligentes.
+                </p>
+                <button v-if="userFeatures.ia_triagem" class="btn btn-secondary" style="width: 100%;" disabled>Ativado</button>
+                <button v-else class="btn btn-primary" style="width: 100%; background: linear-gradient(135deg, #00f2fe, #3b82f6); border: none;" @click="openCheckout('ia_triagem', 'IA Avançada Triagem', 'R$ 9,90')">Assinar Recurso</button>
+              </div>
+
+              <!-- Videoentrevistas -->
+              <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-video" style="color: #f59e0b;"></i> Videoentrevistas</h3>
+                  <span style="font-weight: 800; color: #f59e0b;">R$ 4,99 <small style="font-weight: normal; font-size: 0.7rem;">/mês</small></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Salas WebRTC ilimitadas, gravação opcional e histórico de entrevistas.
+                </p>
+                <button v-if="userFeatures.videoentrevistas" class="btn btn-secondary" style="width: 100%;" disabled>Ativado</button>
+                <button v-else class="btn btn-primary" style="width: 100%;" @click="openCheckout('videoentrevistas', 'Videoentrevistas', 'R$ 4,99')">Assinar Recurso</button>
+              </div>
+
+              <!-- Relatórios Premium -->
+              <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Relatórios Premium</h3>
+                  <span style="font-weight: 800; color: #ef4444;">R$ 3,99 <small style="font-weight: normal; font-size: 0.7rem;">/mês</small></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Exportação em PDF/Excel e estatísticas avançadas de conversão.
+                </p>
+                <button v-if="userFeatures.relatorios_premium" class="btn btn-secondary" style="width: 100%;" disabled>Ativado</button>
+                <button v-else class="btn btn-primary" style="width: 100%;" @click="openCheckout('relatorios_premium', 'Relatórios Premium', 'R$ 3,99')">Assinar Recurso</button>
+              </div>
+
+              <!-- Testes Técnicos -->
+              <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-clipboard-question" style="color: #8b5cf6;"></i> Testes Técnicos</h3>
+                  <span style="font-weight: 800; color: #8b5cf6;">R$ 2,99 <small style="font-weight: normal; font-size: 0.7rem;">/mês</small></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; flex: 1;">
+                  Questionários personalizados e avaliações comportamentais automáticas.
+                </p>
+                <button v-if="userFeatures.testes_tecnicos" class="btn btn-secondary" style="width: 100%;" disabled>Ativado</button>
+                <button v-else class="btn btn-primary" style="width: 100%;" @click="openCheckout('testes_tecnicos', 'Testes Técnicos', 'R$ 2,99')">Assinar Recurso</button>
+              </div>
+
             </div>
           </div>
         </template>
