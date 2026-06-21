@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model audit_logs {
+  id         Int       @id @default(autoincrement())
+  timestamp  DateTime?
+  action     String?
+  details    String?
+  ip_address String?
+
+  @@index([action], map: "ix_audit_logs_action")
+  @@index([id], map: "ix_audit_logs_id")
+}
+
+model banners {
+  id        Int      @id @default(autoincrement())
+  title     String?
+  image_url String?
+  link_url  String?
+  active    Boolean?
+  position  String?
+
+  @@index([id], map: "ix_banners_id")
+}
+
+model blog_posts {
+  id           Int       @id @default(autoincrement())
+  title        String?
+  summary      String?
+  content      String?
+  image_url    String?
+  published_at DateTime?
+
+  @@index([id], map: "ix_blog_posts_id")
+  @@index([title], map: "ix_blog_posts_title")
+}
+
+model configs {
+  key   String  @id
+  value String?
+
+  @@index([key], map: "ix_configs_key")
+}
+
+model financial_transactions {
+  id             Int       @id @default(autoincrement())
+  user_email     String?
+  plan_name      String?
+  amount         Float?
+  status         String?
+  payment_method String?
+  created_at     DateTime?
+
+  @@index([id], map: "ix_financial_transactions_id")
+  @@index([user_email], map: "ix_financial_transactions_user_email")
+}
+
+model jobs {
+  id                Int       @id @default(autoincrement())
+  title             String?
+  company           String?
+  location          String?
+  link              String?   @unique(map: "ix_jobs_link")
+  source            String?
+  description       String?
+  match_score       Int?
+  match_explanation String?
+  status            String?
+  applied_at        DateTime?
+  recruiter_name    String?
+  recruiter_contact String?
+  followup_sent     Boolean?
+  followup_at       DateTime?
+  created_at        DateTime?
+  recruiter_phone   String?
+  company_address   String?
+
+  @@index([id], map: "ix_jobs_id")
+  @@index([company], map: "ix_jobs_company")
+  @@index([title], map: "ix_jobs_title")
+}
+
+model logs {
+  id        Int       @id @default(autoincrement())
+  timestamp DateTime?
+  level     String?
+  message   String?
+
+  @@index([id], map: "ix_logs_id")
+}
+
+model messages {
+  id        Int       @id @default(autoincrement())
+  job_id    Int?
+  sender    String?
+  content   String?
+  timestamp DateTime?
+
+  @@index([job_id], map: "ix_messages_job_id")
+  @@index([id], map: "ix_messages_id")
+}

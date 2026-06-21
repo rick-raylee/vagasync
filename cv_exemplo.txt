@@ -1,0 +1,30 @@
+Ricardo Santos
+Desenvolvedor Full Stack / Engenheiro de Software com IA
+E-mail: ricardo.santos@exemplo.com | Telefone: +55 11 99999-9999
+LinkedIn: linkedin.com/in/ricardosantos
+
+RESUMO PROFISSIONAL
+Desenvolvedor Full Stack experiente no desenvolvimento de soluções completas de software. Especialista em construir APIs robustas em Python (FastAPI, Flask) e interfaces de usuário modernas e fluidas em React (JavaScript/TypeScript, CSS). Forte experiência no uso de modelos de linguagem e desenvolvimento de agentes autônomos utilizando APIs da Google (Gemini) e frameworks como LangChain.
+
+HABILIDADES TÉCNICAS
+- Linguagens: Python, JavaScript, TypeScript, SQL, HTML5, CSS3.
+- Frameworks Backend: FastAPI, Flask, Django.
+- Frameworks Frontend: React, Vite, Redux.
+- Bancos de Dados: SQLite, PostgreSQL, MongoDB, Redis.
+- IA e Automação: Google Gemini API, Playwright, Selenium, LangChain.
+- DevOps & Ferramentas: Git, GitHub, Docker, AWS, Linux.
+
+EXPERIÊNCIA PROFISSIONAL
+Desenvolvedor Full Stack Sênior | TechCorp (2023 - Presente)
+- Liderança técnica no desenvolvimento de microsserviços em Python e FastAPI.
+- Implementação de painéis administrativos dinâmicos e responsivos com React.
+- Criação de scripts de automação em Playwright que otimizaram buscas e análise de dados em 60%.
+- Integração de agentes de Inteligência Artificial para classificação e triagem automática de documentos.
+
+Desenvolvedor Python & React | SoftSystems (2021 - 2023)
+- Desenvolvimento e manutenção de sistemas web utilizando Flask e Django no backend.
+- Migração de interfaces legadas para componentes modulares em React.
+- Otimização de consultas SQL reduzindo tempo de resposta de relatórios complexos.
+
+EDUCAÇÃO
+Bacharelado em Engenharia de Software | Universidade de São Paulo (USP)

@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+google-genai
+playwright
+pydantic
+requests
+python-multipart
+websockets

@@ -1,0 +1,165 @@
+{
+  "name": "Vaga Sync - Notificações Inteligentes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vaga-sync-events",
+        "options": {}
+      },
+      "id": "e2fcd375-7b56-42ea-a4be-e28325a74659",
+      "name": "Webhook Vaga Sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.body.event }}",
+                  "type": "string"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "job_applied",
+                    "operator": "equals"
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.body.event }}",
+                  "type": "string"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "recruiter_contact",
+                    "operator": "equals"
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.body.event }}",
+                  "type": "string"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "followup_sent",
+                    "operator": "equals"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "ccbf4b57-a359-4509-959c-859eb5a539bd",
+      "name": "Switch Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "notice": "Executado quando uma nova candidatura é concluída pelo robô Playwright/IA."
+      },
+      "id": "c16199db-c35f-46fa-bb26-80b6fdbba150",
+      "name": "Candidatura Concluída",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        740,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "notice": "Executado quando há retorno de mensagem de recrutador (WhatsApp/Push disparado)."
+      },
+      "id": "1d8bf62d-944a-493e-8c88-e2eb883bca98",
+      "name": "Contato de Recrutador",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "notice": "Executado após 2 semanas e meia ou após a análise de follow-up do RH ser agendada."
+      },
+      "id": "017cdabf-f80e-4375-be8e-1736b412bf70",
+      "name": "Follow-up de RH Agendado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        740,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Vaga Sync": {
+      "main": [
+        [
+          {
+            "node": "Switch Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Event Type": {
+      "main": [
+        [
+          {
+            "node": "Candidatura Concluída",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Contato de Recrutador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Follow-up de RH Agendado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "meta": {
+    "instanceId": "vagasync"
+  }
+}
