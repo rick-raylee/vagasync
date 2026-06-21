@@ -1310,6 +1310,127 @@ const sendMeetMessage = () => {
   }, 1500);
 };
 
+// Candidate Modal State and Actions
+const selectedCandidateForModal = ref(null);
+const showCandidateModal = ref(false);
+const isAnalyzingCandidate = ref(false);
+
+const candidateAnalyses = {
+  1: {
+    resumo: 'Desenvolvedora Frontend Sênior com forte domínio de ecossistemas reativos modernos e arquitetura de componentes escaláveis.',
+    pontos_fortes: [
+      'Excelente domínio de Vue 3 (Composition API) e React.',
+      'Sólida experiência com CSS moderno, responsividade e otimização de performance UI.',
+      'Excelente comunicação e facilidade para liderança técnica.'
+    ],
+    gaps: [
+      'Pouco contato com linguagens estritamente tipadas como Java/C# no histórico recente.',
+      'Menos familiaridade com infraestrutura na nuvem (AWS/Azure).'
+    ],
+    veredito: 'Altamente Recomendado 🎯'
+  },
+  2: {
+    resumo: 'Desenvolvedor Backend estruturado com foco em APIs de alto tráfego e microsserviços escaláveis.',
+    pontos_fortes: [
+      'Amplo conhecimento prático em Python, Django e FastAPI.',
+      'Modelagem de banco de dados robusta (PostgreSQL, Redis).',
+      'Boas práticas de design patterns e arquiteturas limpas.'
+    ],
+    gaps: [
+      'Menos contato direto com tecnologias modernas de frontend (ex: Vue/React).',
+      'Necessidade de supervisão em decisões de arquitetura em nuvem híbrida.'
+    ],
+    veredito: 'Recomendado 👍'
+  },
+  3: {
+    resumo: 'Desenvolvedora Full Stack versátil com ampla experiência prática no ecossistema JavaScript/TypeScript.',
+    pontos_fortes: [
+      'Domínio completo de React e Node.js.',
+      'Uso eficiente de Docker, CI/CD e esteiras automatizadas.',
+      'Excelente foco em entregas rápidas e autogerenciamento.'
+    ],
+    gaps: [
+      'Projetos anteriores mostram curtas passagens em startups, indicando preferência por ambientes dinâmicos de ritmo acelerado.'
+    ],
+    veredito: 'Altamente Recomendado 🎯'
+  },
+  4: {
+    resumo: 'Especialista em Garantia de Qualidade (QA) e engenharia de testes automatizados E2E.',
+    pontos_fortes: [
+      'Forte domínio de Playwright, Selenium e ferramentas modernas de testes.',
+      'Habilidade em criar suites de testes integrados ao CI/CD.',
+      'Atenção extrema a detalhes e qualidade de código.'
+    ],
+    gaps: [
+      'Menor vivência no desenvolvimento de novas features de produto.',
+      'Conhecimento em React/Vue limitado à inspeção de elementos e automação.'
+    ],
+    veredito: 'Em Observação ⚠️'
+  },
+  5: {
+    resumo: 'Desenvolvedora Frontend Júnior/Pleno com foco em interface de usuário, design responsivo e acessibilidade.',
+    pontos_fortes: [
+      'HTML5/CSS3 semânticos de alta fidelidade visual.',
+      'Conhecimento prático em animações web e design de interação.',
+      'Proatividade em aprender novos frameworks.'
+    ],
+    gaps: [
+      'Falta de experiência comercial com bibliotecas complexas de gerência de estado (Pinia/Redux).',
+      'Pouca vivência em testes de integração de frontend.'
+    ],
+    veredito: 'Recomendado 👍'
+  }
+};
+
+const openCandidateModal = (cand) => {
+  selectedCandidateForModal.value = { ...cand, analysis: null };
+  showCandidateModal.value = true;
+};
+
+const triggerAiAnalysis = () => {
+  if (!selectedCandidateForModal.value) return;
+  isAnalyzingCandidate.value = true;
+  
+  setTimeout(() => {
+    const analysis = candidateAnalyses[selectedCandidateForModal.value.id] || {
+      resumo: 'Candidato triado e sob análise inicial. Perfil básico focado em desenvolvimento de software.',
+      pontos_fortes: ['Sincronização com o radar efetuada.', 'Boa base de competências apresentadas.'],
+      gaps: ['Necessário aprofundamento técnico em entrevista.'],
+      veredito: 'Em Observação ⚠️'
+    };
+    
+    selectedCandidateForModal.value.analysis = analysis;
+    isAnalyzingCandidate.value = false;
+    showToast('Análise de IA Concluída', `O Agente Headhunter gerou o parecer técnico para ${selectedCandidateForModal.value.name}!`, 'success');
+  }, 1200);
+};
+
+const approveCandidate = () => {
+  if (!selectedCandidateForModal.value) return;
+  const id = selectedCandidateForModal.value.id;
+  moveCandidate(id, 'aprovados');
+  showCandidateModal.value = false;
+};
+
+const rejectCandidate = () => {
+  if (!selectedCandidateForModal.value) return;
+  const id = selectedCandidateForModal.value.id;
+  const cand = recruitedCandidates.value.find(c => c.id === id);
+  if (cand) {
+    cand.status = 'reprovados';
+    saveCandidates();
+    showToast('Candidato Reprovado', `${cand.name} foi movido para a lista de reprovados/descartados.`, 'info');
+  }
+  showCandidateModal.value = false;
+};
+
+const restoreCandidate = () => {
+  if (!selectedCandidateForModal.value) return;
+  const id = selectedCandidateForModal.value.id;
+  moveCandidate(id, 'recebidos');
+  showCandidateModal.value = false;
+};
+
 // End of setup injection
 </script>
 
@@ -1320,6 +1441,145 @@ const sendMeetMessage = () => {
       <div class="toast-content">
         <h4>{{ toast.title }}</h4>
         <p>{{ toast.message }}</p>
+      </div>
+    </div>
+
+    <!-- Modal de Visualização de Currículo & Análise IA -->
+    <div v-if="showCandidateModal && selectedCandidateForModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(6, 9, 19, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem;">
+      <div class="glass-card" style="width: 100%; max-width: 800px; max-height: 90vh; overflow-y: auto; border: 1px solid rgba(59,130,246,0.3); display: flex; flex-direction: column; gap: 1.5rem; animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.4rem; color: #fff;">{{ selectedCandidateForModal.name }}</h3>
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">{{ selectedCandidateForModal.role }} • {{ selectedCandidateForModal.email }}</span>
+          </div>
+          <button @click="showCandidateModal = false" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <!-- Lado Esquerdo: Visualização do Currículo -->
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <h4 style="margin: 0; font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-file-invoice" style="color: var(--color-secondary);"></i> Currículo do Candidato
+            </h4>
+            <textarea 
+              class="form-input" 
+              rows="14" 
+              style="font-size: 0.85rem; line-height: 1.5; background: #0d1426; border-color: var(--border-color); color: var(--text-primary); resize: none; width: 100%; border-radius: 6px; padding: 0.75rem;" 
+              v-model="selectedCandidateForModal.resume"
+            ></textarea>
+          </div>
+
+          <!-- Lado Direito: Análise de IA do Agente -->
+          <div style="display: flex; flex-direction: column; gap: 1rem; background: rgba(59, 130, 246, 0.03); border: 1px solid rgba(59, 130, 246, 0.15); border-radius: 8px; padding: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h4 style="margin: 0; font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-robot" style="color: var(--color-primary);"></i> Parecer do Agente IA
+              </h4>
+              <span class="match-badge match-high">{{ selectedCandidateForModal.match }}% Match</span>
+            </div>
+
+            <!-- Se não for Pro, exibe o bloqueio -->
+            <div v-if="!isRecruiterPro" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; min-height: 250px; padding: 1rem;">
+              <i class="fa-solid fa-lock" style="font-size: 2.5rem; color: #f59e0b; opacity: 0.85;"></i>
+              <h4 style="margin: 0; color: #fff; font-size: 1.05rem;">🔒 Análise IA Bloqueada</h4>
+              <p style="font-size: 0.82rem; color: var(--text-secondary); max-width: 250px; line-height: 1.5;">
+                A análise técnica profunda feita por Inteligência Artificial é exclusiva para assinantes do plano **Recrutador Pro**.
+              </p>
+              <button 
+                class="btn btn-primary" 
+                style="background: linear-gradient(135deg, #f59e0b, #ec4899); border: none; color: #fff; font-weight: 700; width: 100%; margin-top: 0.5rem;"
+                @click="openCheckout('recruiter_pro'); showCandidateModal = false;"
+              >
+                Assinar Recrutador Pro
+              </button>
+            </div>
+
+            <!-- Se for Pro, exibe a opção de analisar ou o resultado -->
+            <div v-else style="height: 100%; display: flex; flex-direction: column;">
+              <!-- Botão de disparar análise se ainda não foi feita -->
+              <div v-if="!selectedCandidateForModal.analysis" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; min-height: 250px; padding: 1rem;">
+                <i class="fa-solid fa-brain-circuit" style="font-size: 2.5rem; color: var(--color-secondary); opacity: 0.5;"></i>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); max-width: 250px;">
+                  Dispare a análise técnica profunda baseada no currículo e perfil.
+                </p>
+                <button 
+                  class="btn btn-primary" 
+                  style="background: linear-gradient(135deg, #3b82f6, #00f2fe); border: none; color: #060913; font-weight: 700;"
+                  @click="triggerAiAnalysis"
+                  :disabled="isAnalyzingCandidate"
+                >
+                  <span v-if="isAnalyzingCandidate"><i class="fa-solid fa-spinner fa-spin"></i> Analisando...</span>
+                  <span v-else><i class="fa-solid fa-wand-magic-sparkles"></i> Analisar com Agente IA</span>
+                </button>
+              </div>
+
+              <!-- Resultado da Análise -->
+              <div v-else style="display: flex; flex-direction: column; gap: 0.85rem; font-size: 0.8rem; line-height: 1.5; color: var(--text-primary); text-align: left;">
+                <div>
+                  <strong style="color: var(--color-secondary); display: block; margin-bottom: 2px;">Resumo Profissional:</strong>
+                  <p style="margin: 0; color: var(--text-secondary);">{{ selectedCandidateForModal.analysis.resumo }}</p>
+                </div>
+
+                <div>
+                  <strong style="color: var(--color-success); display: block; margin-bottom: 2px;">Pontos Fortes:</strong>
+                  <ul style="margin: 0; padding-left: 1.2rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
+                    <li v-for="(pf, idx) in selectedCandidateForModal.analysis.pontos_fortes" :key="idx">{{ pf }}</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <strong style="color: var(--color-error); display: block; margin-bottom: 2px;">Pontos de Atenção / Gaps:</strong>
+                  <ul style="margin: 0; padding-left: 1.2rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
+                    <li v-for="(gap, idx) in selectedCandidateForModal.analysis.gaps" :key="idx">{{ gap }}</li>
+                  </ul>
+                </div>
+
+                <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 700;">Veredito da IA:</span>
+                  <span style="font-size: 0.85rem; font-weight: 800; color: #fff;">{{ selectedCandidateForModal.analysis.veredito }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer do Modal com Ações de Aprovar/Reprovar/Mover -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem;">
+            <!-- Reprovar / Descartar -->
+            <button 
+              v-if="selectedCandidateForModal.status !== 'reprovados'" 
+              class="btn btn-secondary" 
+              style="color: var(--color-error); border-color: rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.05);"
+              @click="rejectCandidate"
+            >
+              <i class="fa-solid fa-user-xmark"></i> Reprovar Candidato
+            </button>
+            <!-- Reativar se estiver reprovado -->
+            <button 
+              v-else 
+              class="btn btn-secondary" 
+              style="color: var(--color-secondary); border-color: rgba(0, 242, 254, 0.25);"
+              @click="restoreCandidate"
+            >
+              <i class="fa-solid fa-rotate-left"></i> Reativar / Mover
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem;">
+            <button class="btn btn-secondary" @click="showCandidateModal = false">Fechar</button>
+            
+            <!-- Aprovar / Avançar se não estiver no status aprovado -->
+            <button 
+              v-if="selectedCandidateForModal.status !== 'aprovados' && selectedCandidateForModal.status !== 'reprovados'" 
+              class="btn btn-primary" 
+              style="background: linear-gradient(135deg, #10b981, #34d399); border: none; color: #060913; font-weight: 700;"
+              @click="approveCandidate"
+            >
+              <i class="fa-solid fa-user-check"></i> Aprovar Candidato
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3245,6 +3505,7 @@ const sendMeetMessage = () => {
                       <span>{{ cand.role }}</span>
                       <div class="match-badge match-high" style="margin-top: 0.25rem;">Match: {{ cand.match }}%</div>
                       <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
                         <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'analise')">Mover &rarr;</button>
                       </div>
                     </div>
@@ -3260,6 +3521,7 @@ const sendMeetMessage = () => {
                       <span>{{ cand.role }}</span>
                       <div class="match-badge match-high" style="margin-top: 0.25rem;">Match: {{ cand.match }}%</div>
                       <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
                         <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'entrevista')">Mover &rarr;</button>
                       </div>
                     </div>
@@ -3288,7 +3550,10 @@ const sendMeetMessage = () => {
                         <button v-else class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.3rem;" @click="activeTab = 'recruiter_billing'">
                           🔒 Meet por Vídeo (Requer Pro)
                         </button>
-                        <button class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'aprovados')">Aprovar &rarr;</button>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
+                          <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'aprovados')">Aprovar &rarr;</button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3303,7 +3568,23 @@ const sendMeetMessage = () => {
                       <span>{{ cand.role }}</span>
                       <div class="match-badge match-high" style="margin-top: 0.25rem; background: rgba(16,185,129,0.12); color: var(--color-success); border-color: rgba(16,185,129,0.3);">Aprovado ✓</div>
                       <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
                         <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem; color: var(--color-error);" @click="moveCandidate(cand.id, 'recebidos')">Reiniciar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Reprovados column -->
+                <div class="kanban-column">
+                  <div class="kanban-column-header" style="border-top-color: var(--color-error);">Reprovados ({{ recruitedCandidates.filter(c => c.status === 'reprovados').length }})</div>
+                  <div class="kanban-cards-wrapper">
+                    <div v-for="cand in recruitedCandidates.filter(c => c.status === 'reprovados')" :key="cand.id" class="kanban-card" style="border-left-color: var(--color-error); opacity: 0.75;">
+                      <strong>{{ cand.name }}</strong>
+                      <span>{{ cand.role }}</span>
+                      <div class="match-badge" style="margin-top: 0.25rem; background: rgba(239, 68, 68, 0.12); color: var(--color-error); border-color: rgba(239, 68, 68, 0.3);">Reprovado ✗</div>
+                      <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
                       </div>
                     </div>
                   </div>
