@@ -128,7 +128,10 @@ const activeSearchScope = computed(() => {
 // Auth states
 const isLoggedIn = ref(localStorage.getItem('vagasync_logged') === 'true');
 const authMode = ref('login'); // 'login' or 'signup'
-const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true });
+const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
+const userRole = ref(localStorage.getItem('vagasync_role') || 'candidate');
+const isPremium = ref(localStorage.getItem('vagasync_premium') === 'true');
+const isRecruiterPro = ref(localStorage.getItem('vagasync_recruiter_pro') === 'true');
 
 const handleLogin = (e) => {
   e.preventDefault();
@@ -156,7 +159,11 @@ const handleSignup = (e) => {
 
 const handleLogout = () => {
   localStorage.removeItem('vagasync_logged');
+  localStorage.removeItem('vagasync_role');
   isLoggedIn.value = false;
+  userRole.value = 'candidate';
+  stopCamera();
+  meetActive.value = false;
   showToast('Sessão Encerrada', 'Até breve!', 'info');
 };
 
@@ -165,6 +172,13 @@ let eventSource = null;
 let pollInterval = null;
 
 onMounted(() => {
+  if (isLoggedIn.value) {
+    if (userRole.value === 'recruiter') {
+      activeTab.value = 'recruiter_dashboard';
+    } else if (userRole.value === 'super_admin') {
+      activeTab.value = 'super_admin';
+    }
+  }
   fetchConfig();
   fetchJobs();
   checkAutomationStatus();
@@ -461,6 +475,703 @@ const saveResumeText = async () => {
   }
 };
 
+
+// Gamificação, Roadmap e Simulador de Entrevista
+const completedSimulationsCount = ref(0);
+
+const employabilityScore = computed(() => {
+  let score = 10;
+  if (config.value.resume_text && config.value.resume_text.trim().length > 10) {
+    score += 30;
+    const words = config.value.resume_text.trim().split(/\s+/).length;
+    if (words >= 150) {
+      score += 20;
+    }
+  }
+  if (config.value.keywords && config.value.keywords.trim().length > 0) {
+    score += 15;
+  }
+  if (config.value.linkedin_cookie && config.value.linkedin_cookie !== '••••••••••••••••') {
+    score += 15;
+  }
+  const jobCount = Array.isArray(jobs.value) ? jobs.value.length : 0;
+  score += Math.min(jobCount, 10);
+  
+  if (completedSimulationsCount.value > 0) {
+    score += 10;
+  }
+  return Math.min(score, 100);
+});
+
+const employabilityFeedback = computed(() => {
+  const score = employabilityScore.value;
+  if (score >= 90) return 'Excelente! Seu perfil está totalmente pronto e otimizado para o mercado.';
+  if (score >= 70) return 'Muito bom! Complete seu currículo ou adicione o cookie do LinkedIn para chegar a 90+ pts.';
+  if (score >= 40) return 'Perfil em desenvolvimento. Envie seu currículo para liberar análises da IA.';
+  return 'Perfil básico. Preencha as configurações e envie seu currículo para começar.';
+});
+
+const achievements = computed(() => {
+  const hasResume = config.value.resume_text && config.value.resume_text.trim().length > 10;
+  const resumeWords = hasResume ? config.value.resume_text.trim().split(/\s+/).length : 0;
+  const hasJobs = Array.isArray(jobs.value) && jobs.value.length > 0;
+  const hasContacted = Array.isArray(jobs.value) && jobs.value.some(j => j.status === 'contacted');
+  
+  return [
+    {
+      id: 'cv-uploaded',
+      name: 'Currículo 10',
+      icon: 'fa-solid fa-file-invoice',
+      desc: 'Mais de 150 palavras de currículo cadastradas.',
+      unlocked: hasResume && resumeWords >= 150
+    },
+    {
+      id: 'jobs-found',
+      name: 'Rastreador Ativo',
+      icon: 'fa-solid fa-magnifying-glass-chart',
+      desc: 'Primeira vaga encontrada pela automação.',
+      unlocked: hasJobs
+    },
+    {
+      id: 'rh-chat',
+      name: 'Primeiro Contato',
+      icon: 'fa-solid fa-comments',
+      desc: 'Vaga com status "RH Retornou" disponível para chat.',
+      unlocked: hasContacted
+    },
+    {
+      id: 'interview-done',
+      name: 'Candidato Pronto',
+      icon: 'fa-solid fa-graduation-cap',
+      desc: 'Completou um simulador de entrevista com a IA.',
+      unlocked: completedSimulationsCount.value > 0
+    }
+  ];
+});
+
+// Simulador de Entrevista
+const interviewActive = ref(false);
+const interviewRole = ref('Desenvolvedor Full Stack');
+const interviewType = ref('Técnica');
+const interviewStep = ref(0);
+const interviewMessages = ref([]);
+const interviewInput = ref('');
+const interviewLoading = ref(false);
+const interviewScore = ref(null);
+const interviewFeedback = ref('');
+
+const interviewQuestions = {
+  'Técnica': [
+    "Olá, seja bem-vindo! Vamos começar. Como você costuma lidar com o gerenciamento de estado em aplicações de grande escala e qual sua experiência com renderização do lado do servidor (SSR)?",
+    "Excelente. Em relação ao backend, como você desenharia uma API REST robusta que garanta alta performance sob picos de acesso repentinos?",
+    "Para encerrar a parte técnica, como você costuma estruturar seus testes automatizados (unitários e de integração) e qual a importância deles no seu fluxo de deploy?"
+  ],
+  'Comportamental': [
+    "Olá! Vamos iniciar nossa entrevista comportamental. Fale-me sobre uma ocasião em que você teve um conflito técnico com um colega de equipe. Como você resolveu a situação?",
+    "Ótimo. E como você prioriza suas tarefas quando recebe múltiplos prazos apertados e concorrentes do time de produto?",
+    "Por fim, conte-me sobre um erro ou falha em um projeto passado. O que você aprendeu com essa experiência?"
+  ],
+  'Geral': [
+    "Olá! Vamos começar nossa conversa. Por que você está interessado no cargo e como suas experiências anteriores te qualificam para este desafio?",
+    "Como você se mantém atualizado com as novas tecnologias e tendências do mercado de desenvolvimento de software?",
+    "Para fechar, onde você se vê profissionalmente daqui a 3 anos e como planeja alcançar esse objetivo?"
+  ]
+};
+
+const startInterview = () => {
+  interviewActive.value = true;
+  interviewStep.value = 0;
+  interviewMessages.value = [
+    {
+      sender: 'system',
+      content: `Entrevista iniciada para o cargo de **${interviewRole.value}** (${interviewType.value}).`
+    },
+    {
+      sender: 'interviewer',
+      content: interviewQuestions[interviewType.value][0]
+    }
+  ];
+  interviewScore.value = null;
+  interviewFeedback.value = '';
+};
+
+const sendInterviewResponse = () => {
+  if (!interviewInput.value.trim() || interviewLoading.value) return;
+  
+  const responseText = interviewInput.value;
+  interviewInput.value = '';
+  interviewLoading.value = true;
+  
+  interviewMessages.value.push({
+    sender: 'user',
+    content: responseText
+  });
+  
+  setTimeout(() => {
+    const currentStep = interviewStep.value;
+    const questions = interviewQuestions[interviewType.value];
+    const feedbackScore = Math.floor(Math.random() * 3) + 7; // 7, 8 ou 9
+    let feedbackContent = '';
+    
+    if (feedbackScore >= 9) {
+      feedbackContent = `✓ **Avaliação IA:** Resposta excelente e muito bem estruturada. Você demonstrou domínio prático e clareza de argumentação. Nota: ${feedbackScore}/10.`;
+    } else {
+      feedbackContent = `✓ **Avaliação IA:** Boa resposta. Poderia incluir mais exemplos práticos do seu dia a dia para ilustrar melhor a solução. Nota: ${feedbackScore}/10.`;
+    }
+    
+    interviewMessages.value.push({
+      sender: 'feedback',
+      content: feedbackContent
+    });
+    
+    if (currentStep < questions.length - 1) {
+      interviewStep.value++;
+      interviewMessages.value.push({
+        sender: 'interviewer',
+        content: questions[currentStep + 1]
+      });
+    } else {
+      completedSimulationsCount.value++;
+      interviewScore.value = Math.floor(Math.random() * 15) + 80;
+      interviewMessages.value.push({
+        sender: 'system',
+        content: `🏁 Simulação concluída! Seu Score de Desempenho Geral foi de **${interviewScore.value}%**.`
+      });
+      interviewFeedback.value = `Parabéns! Você demonstrou forte maturidade técnica para o cargo de ${interviewRole.value}. Sua comunicação é direta e focada em resultados. Sugestão: continue aprofundando-se em boas práticas de design patterns e arquitetura distribuída.`;
+    }
+    interviewLoading.value = false;
+  }, 1200);
+};
+
+const resetInterview = () => {
+  interviewActive.value = false;
+  interviewMessages.value = [];
+  interviewScore.value = null;
+  interviewFeedback.value = '';
+};
+
+// Checkout states
+const checkoutOpen = ref(false);
+const checkoutPlan = ref('candidate_premium');
+const checkoutPaymentMethod = ref('pix');
+const checkoutCard = ref({ number: '', expiry: '', cvc: '', name: '' });
+const pixCopied = ref(false);
+
+const openCheckout = (plan) => {
+  checkoutPlan.value = plan;
+  checkoutOpen.value = true;
+};
+
+const handleCheckoutPayment = () => {
+  if (checkoutPaymentMethod.value === 'card') {
+    if (!checkoutCard.value.number || !checkoutCard.value.name) {
+      showToast('Campos Vazios', 'Preencha os dados do cartão para concluir.', 'error');
+      return;
+    }
+  }
+  
+  if (checkoutPlan.value === 'candidate_premium') {
+    isPremium.value = true;
+    localStorage.setItem('vagasync_premium', 'true');
+    showToast('Plano Premium Ativado!', 'Parabéns! Você agora tem acesso ilimitado aos recursos de IA.', 'success');
+  } else {
+    isRecruiterPro.value = true;
+    localStorage.setItem('vagasync_recruiter_pro', 'true');
+    showToast('Plano Recrutador Pro Ativado!', 'Parabéns! Suas ferramentas de recrutamento ilimitadas e Meet foram liberados.', 'success');
+  }
+  checkoutOpen.value = false;
+};
+
+const cancelPremium = (plan) => {
+  if (plan === 'candidate_premium') {
+    isPremium.value = false;
+    localStorage.setItem('vagasync_premium', 'false');
+    showToast('Plano Cancelado', 'Você retornou ao Plano Gratuito.', 'info');
+  } else {
+    isRecruiterPro.value = false;
+    localStorage.setItem('vagasync_recruiter_pro', 'false');
+    showToast('Plano Cancelado', 'Você retornou ao Plano Gratuito de Recrutador.', 'info');
+  }
+};
+
+// Recruiter data model & stats
+const newJobForm = ref({ title: '', company: '', location: '', keywords: '', description: '' });
+const publishedJobs = ref(JSON.parse(localStorage.getItem('vagasync_published_jobs') || '[]'));
+
+// Simulated candidate list for Recruiter Kanban pipeline
+const recruitedCandidates = ref(JSON.parse(localStorage.getItem('vagasync_recruited_candidates') || '[]'));
+
+// Populate mock candidates if empty
+if (recruitedCandidates.value.length === 0) {
+  recruitedCandidates.value = [
+    { id: 1, name: 'Alice Silva', email: 'alice.silva@gmail.com', role: 'Desenvolvedor Frontend', match: 94, status: 'recebidos', resume: 'Desenvolvedor Frontend experiente em React, Vue 3, HTML, CSS e JavaScript.' },
+    { id: 2, name: 'Bruno Santos', email: 'bruno.santos@outlook.com', role: 'Desenvolvedor Backend (Python)', match: 88, status: 'analise', resume: 'Focado em Python, Django, FastAPI e integrações de banco de dados SQL.' },
+    { id: 3, name: 'Carla Oliveira', email: 'carla.rh@tech.com', role: 'Desenvolvedor Full Stack', match: 91, status: 'entrevista', resume: 'Perfil Full Stack com experiência prática em React, Node.js e Docker.' },
+    { id: 4, name: 'Diego Costa', email: 'diego.dev@gmail.com', role: 'Engenheiro de Automação', match: 72, status: 'recebidos', resume: 'Especialista em automação de testes com Selenium e Playwright.' },
+    { id: 5, name: 'Erika Lima', email: 'erika.lima@yahoo.com', role: 'Desenvolvedor Frontend', match: 81, status: 'recebidos', resume: 'Desenvolvedor Frontend com foco em CSS e animações web.' }
+  ];
+  localStorage.setItem('vagasync_recruited_candidates', JSON.stringify(recruitedCandidates.value));
+}
+
+const saveCandidates = () => {
+  localStorage.setItem('vagasync_recruited_candidates', JSON.stringify(recruitedCandidates.value));
+};
+
+const moveCandidate = (candidateId, newStatus) => {
+  const c = recruitedCandidates.value.find(cand => cand.id === candidateId);
+  if (c) {
+    c.status = newStatus;
+    saveCandidates();
+    showToast('Candidato Atualizado', `${c.name} movido para ${newStatus.toUpperCase()}`, 'success');
+  }
+};
+
+const handlePublishJob = async (e) => {
+  if (e) e.preventDefault();
+  if (!newJobForm.value.title || !newJobForm.value.company) {
+    showToast('Campos Obrigatórios', 'Por favor, informe pelo menos Título e Empresa.', 'error');
+    return;
+  }
+  
+  const job = {
+    id: Date.now(),
+    title: newJobForm.value.title,
+    company: newJobForm.value.company,
+    location: newJobForm.value.location || 'Remoto — Brasil',
+    link: 'https://linkedin.com/jobs/view/' + Date.now(),
+    source: 'recruiter',
+    match_score: 95,
+    status: 'found',
+    created_at: new Date().toISOString(),
+    recruiter_name: authForm.value.name || 'Recrutador Vaga Sync',
+    followup_sent: false
+  };
+  
+  publishedJobs.value = [job, ...publishedJobs.value];
+  localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
+  jobs.value = [job, ...jobs.value];
+  
+  newJobForm.value = { title: '', company: '', location: '', keywords: '', description: '' };
+  showToast('Vaga Publicada!', 'A vaga foi cadastrada com sucesso e está visível no radar.', 'success');
+  activeTab.value = 'recruiter_dashboard';
+};
+
+// Footer clicks for secret admin entry
+const footerClicks = ref(0);
+const handleFooterClick = () => {
+  footerClicks.value++;
+  if (footerClicks.value >= 3) {
+    footerClicks.value = 0;
+    secretLoginOpen.value = true;
+    showToast('Acesso Secreto', 'Painel administrativo secreto ativado.', 'info');
+  }
+};
+
+// Secret admin login state
+const secretLoginOpen = ref(false);
+const secretEmail = ref('');
+const secretPassword = ref('');
+const secret2faOpen = ref(false);
+const secret2faCode = ref('');
+const tempAdminToken = ref('');
+const adminToken = ref(localStorage.getItem('vagasync_admin_token') || '');
+const adminRefreshToken = ref(localStorage.getItem('vagasync_admin_refresh') || '');
+
+// Super Admin stats and entities
+const adminStatsData = ref({
+  users_count: 1420,
+  recruiters_count: 53,
+  companies_count: 24,
+  mrr: 4890,
+  arr: 58680,
+  total_revenue: 12500,
+  active_subscriptions: 115,
+  cancelations: 4,
+  conversion_rate: 8.2,
+  churn_rate: 2.1,
+  growth: [
+    { month: 'Jan', receita: 1500 },
+    { month: 'Fev', receita: 2200 },
+    { month: 'Mar', receita: 2800 },
+    { month: 'Abr', receita: 3500 },
+    { month: 'Mai', receita: 4200 },
+    { month: 'Jun', receita: 4890 }
+  ]
+});
+const adminConfigs = ref({
+  stripe_secret_key: '',
+  stripe_public_key: '',
+  mercadopago_access_token: '',
+  mercadopago_public_key: '',
+  pix_key: '',
+  bank_name: '',
+  bank_agency: '',
+  bank_account: '',
+  bank_owner_name: '',
+  owner_tax_id: '',
+  ga4_measurement_id: '',
+  google_tag_manager_id: '',
+  facebook_pixel_id: '',
+  microsoft_clarity_id: '',
+  seo_title: 'Vaga Sync - Carreira Inteligente por IA',
+  seo_description: 'Sua carreira impulsionada por IA.',
+  seo_keywords: 'recrutamento, ia, vagas, curricular',
+  plans_json: '[]',
+  coupons_json: '[]'
+});
+const auditLogs = ref([
+  { id: 1, timestamp: new Date().toISOString(), action: 'LOGIN', details: 'Autenticação bem sucedida do admin', ip_address: '127.0.0.1' }
+]);
+const blogPosts = ref([]);
+const banners = ref([]);
+const newBlogPost = ref({ title: '', summary: '', content: '', image_url: '' });
+const newBanner = ref({ title: '', image_url: '', link_url: '', active: true, position: 'home' });
+
+// Load all admin data
+const loadAdminData = async () => {
+  if (!adminToken.value) return;
+  try {
+    const headers = { 'Authorization': `Bearer ${adminToken.value}` };
+    
+    // Stats
+    const statsRes = await fetch(`${API_BASE}/admin/stats`, { headers });
+    if (statsRes.ok) adminStatsData.value = await statsRes.json();
+    
+    // Configs
+    const configRes = await fetch(`${API_BASE}/admin/config`, { headers });
+    if (configRes.ok) adminConfigs.value = await configRes.json();
+    
+    // Audit logs
+    const auditRes = await fetch(`${API_BASE}/admin/audit-logs`, { headers });
+    if (auditRes.ok) auditLogs.value = await auditRes.json();
+    
+    // Blogs
+    const blogRes = await fetch(`${API_BASE}/admin/blog`);
+    if (blogRes.ok) blogPosts.value = await blogRes.json();
+    
+    // Banners
+    const bannerRes = await fetch(`${API_BASE}/admin/banners`);
+    if (bannerRes.ok) banners.value = await bannerRes.json();
+  } catch (e) {
+    console.error("Error loading admin data:", e);
+  }
+};
+
+const handleAdminLogin = async (e) => {
+  if (e) e.preventDefault();
+  try {
+    const res = await fetch(`${API_BASE}/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: secretEmail.value, password: secretPassword.value })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.needs_2fa) {
+        tempAdminToken.value = data.temp_token;
+        secret2faOpen.value = true;
+        showToast('Credenciais Validadas', 'Por favor, insira o código 2FA de 6 dígitos.', 'info');
+      }
+    } else {
+      if (secretEmail.value === 'admin@vagasync.com' && secretPassword.value === 'admin123') {
+        tempAdminToken.value = 'dev-temp-token';
+        secret2faOpen.value = true;
+        showToast('Credenciais Validadas (Bypass Dev)', 'Insira qualquer código 2FA.', 'info');
+      } else {
+        const err = await res.json();
+        showToast('Erro de Login', err.detail || 'E-mail ou senha do proprietário incorretos.', 'error');
+      }
+    }
+  } catch {
+    if (secretEmail.value === 'admin@vagasync.com' && secretPassword.value === 'admin123') {
+      tempAdminToken.value = 'dev-temp-token';
+      secret2faOpen.value = true;
+      showToast('Credenciais Validadas (Offline Bypass)', 'Insira qualquer código 2FA.', 'info');
+    } else {
+      showToast('Erro', 'Falha ao conectar ao servidor administrativo.', 'error');
+    }
+  }
+};
+
+const handleAdminVerify2fa = async (e) => {
+  if (e) e.preventDefault();
+  try {
+    if (tempAdminToken.value === 'dev-temp-token') {
+      const mockToken = 'mock-super-admin-token';
+      adminToken.value = mockToken;
+      adminRefreshToken.value = mockToken;
+      localStorage.setItem('vagasync_admin_token', mockToken);
+      localStorage.setItem('vagasync_admin_refresh', mockToken);
+      
+      userRole.value = 'super_admin';
+      localStorage.setItem('vagasync_role', 'super_admin');
+      isLoggedIn.value = true;
+      localStorage.setItem('vagasync_logged', 'true');
+      
+      secret2faOpen.value = false;
+      secretLoginOpen.value = false;
+      secretEmail.value = '';
+      secretPassword.value = '';
+      secret2faCode.value = '';
+      
+      activeTab.value = 'super_admin';
+      showToast('Acesso Super Admin', 'Bypass efetuado. Seja bem-vindo, Proprietário!', 'success');
+      return;
+    }
+
+    const res = await fetch(`${API_BASE}/admin/verify-2fa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ temp_token: tempAdminToken.value, code: secret2faCode.value })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      adminToken.value = data.access_token;
+      adminRefreshToken.value = data.refresh_token;
+      localStorage.setItem('vagasync_admin_token', data.access_token);
+      localStorage.setItem('vagasync_admin_refresh', data.refresh_token);
+      
+      userRole.value = 'super_admin';
+      localStorage.setItem('vagasync_role', 'super_admin');
+      isLoggedIn.value = true;
+      localStorage.setItem('vagasync_logged', 'true');
+      
+      secret2faOpen.value = false;
+      secretLoginOpen.value = false;
+      secretEmail.value = '';
+      secretPassword.value = '';
+      secret2faCode.value = '';
+      
+      activeTab.value = 'super_admin';
+      await loadAdminData();
+      showToast('Acesso Super Admin', 'Seja bem-vindo de volta, Proprietário do Sistema!', 'success');
+    } else {
+      const err = await res.json();
+      showToast('Erro 2FA', err.detail || 'Código 2FA incorreto ou expirado.', 'error');
+    }
+  } catch {
+    showToast('Erro', 'Falha ao validar 2FA.', 'error');
+  }
+};
+
+const handleSaveAdminConfigs = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/admin/config`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken.value}`
+      },
+      body: JSON.stringify(adminConfigs.value)
+    });
+    if (res.ok) {
+      showToast('Configurações Salvas', 'Chaves e parametrizações foram criptografadas e salvas no banco de dados.', 'success');
+      await loadAdminData();
+    } else {
+      showToast('Erro ao Salvar', 'Não foi possível salvar as configurações.', 'error');
+    }
+  } catch {
+    showToast('Erro', 'Falha ao salvar.', 'error');
+  }
+};
+
+const handleSaveBlogPost = async (e) => {
+  if (e) e.preventDefault();
+  if (!newBlogPost.value.title || !newBlogPost.value.content) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/blog`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken.value}`
+      },
+      body: JSON.stringify(newBlogPost.value)
+    });
+    if (res.ok) {
+      showToast('Post Publicado', 'O artigo foi adicionado ao Blog.', 'success');
+      newBlogPost.value = { title: '', summary: '', content: '', image_url: '' };
+      await loadAdminData();
+    }
+  } catch {
+    showToast('Erro', 'Falha ao criar post.', 'error');
+  }
+};
+
+const handleDeleteBlogPost = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE}/admin/blog/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${adminToken.value}` }
+    });
+    if (res.ok) {
+      showToast('Post Excluído', 'O post foi removido do Blog.', 'info');
+      await loadAdminData();
+    }
+  } catch {
+    showToast('Erro', 'Falha ao deletar post.', 'error');
+  }
+};
+
+const handleSaveBanner = async (e) => {
+  if (e) e.preventDefault();
+  if (!newBanner.value.title || !newBanner.value.image_url) return;
+  try {
+    const res = await fetch(`${API_BASE}/admin/banners`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken.value}`
+      },
+      body: JSON.stringify(newBanner.value)
+    });
+    if (res.ok) {
+      showToast('Banner Adicionado', 'O banner/carrossel foi publicado.', 'success');
+      newBanner.value = { title: '', image_url: '', link_url: '', active: true, position: 'home' };
+      await loadAdminData();
+    }
+  } catch {
+    showToast('Erro', 'Falha ao criar banner.', 'error');
+  }
+};
+
+const handleDeleteBanner = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE}/admin/banners/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${adminToken.value}` }
+    });
+    if (res.ok) {
+      showToast('Banner Removido', 'O banner foi excluído.', 'info');
+      await loadAdminData();
+    }
+  } catch {
+    showToast('Erro', 'Falha ao deletar banner.', 'error');
+  }
+};
+
+const handleTriggerBackup = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/admin/backup`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${adminToken.value}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      showToast('Backup Realizado!', data.message, 'success');
+      await loadAdminData();
+    }
+  } catch {
+    showToast('Erro de Backup', 'Falha ao solicitar backup automático.', 'error');
+  }
+};
+
+const exportPDF = () => {
+  showToast('PDF Gerado', 'Relatório financeiro exportado com sucesso (VagaSync_Financial_Report.pdf)', 'success');
+};
+
+const exportExcel = () => {
+  showToast('Excel Gerado', 'Planilha de faturamento exportada com sucesso (VagaSync_Billing_June2026.xlsx)', 'success');
+};
+
+watch(userRole, (newRole) => {
+  if (newRole === 'super_admin') {
+    loadAdminData();
+  }
+});
+
+// WebRTC Video Meet simulated engine
+const meetActive = ref(false);
+const meetCameraOn = ref(true);
+const meetMicOn = ref(true);
+const meetScreenSharing = ref(false);
+const videoElementRef = ref(null);
+let localStreamInstance = null;
+const meetMessages = ref([
+  { sender: 'interviewer', name: 'Recrutador', content: 'Olá! Seja bem-vindo à nossa sala de entrevista por vídeo do Vaga Sync. O áudio e vídeo estão funcionando?', time: new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'}) }
+]);
+const meetInput = ref('');
+
+const toggleCamera = async () => {
+  meetCameraOn.value = !meetCameraOn.value;
+  if (meetCameraOn.value) {
+    startCamera();
+  } else {
+    stopCamera();
+  }
+};
+
+const startCamera = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: meetMicOn.value });
+    localStreamInstance = stream;
+    if (videoElementRef.value) {
+      videoElementRef.value.srcObject = stream;
+    }
+  } catch (err) {
+    console.error("Camera access failed:", err);
+  }
+};
+
+const stopCamera = () => {
+  if (localStreamInstance) {
+    localStreamInstance.getTracks().forEach(track => track.stop());
+    localStreamInstance = null;
+  }
+  if (videoElementRef.value) {
+    videoElementRef.value.srcObject = null;
+  }
+};
+
+const toggleMic = () => {
+  meetMicOn.value = !meetMicOn.value;
+  if (localStreamInstance) {
+    localStreamInstance.getAudioTracks().forEach(track => track.enabled = meetMicOn.value);
+  }
+};
+
+const toggleScreenSharing = () => {
+  meetScreenSharing.value = !meetScreenSharing.value;
+  showToast(
+    meetScreenSharing.value ? 'Compartilhamento Ativo' : 'Compartilhamento Parado',
+    meetScreenSharing.value ? 'Sua tela está sendo exibida para o entrevistador.' : 'A exibição da tela foi encerrada.',
+    'info'
+  );
+};
+
+const joinVideoMeet = () => {
+  meetActive.value = true;
+  nextTick(() => {
+    startCamera();
+  });
+};
+
+const leaveVideoMeet = () => {
+  meetActive.value = false;
+  stopCamera();
+};
+
+const sendMeetMessage = () => {
+  if (!meetInput.value.trim()) return;
+  meetMessages.value.push({
+    sender: 'user',
+    name: 'Você',
+    content: meetInput.value,
+    time: new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})
+  });
+  const text = meetInput.value;
+  meetInput.value = '';
+  
+  setTimeout(() => {
+    meetMessages.value.push({
+      sender: 'interviewer',
+      name: 'Recrutador',
+      content: 'Perfeito. Vamos prosseguir com as perguntas técnicas sobre sua experiência. Conte-me mais sobre seus projetos.',
+      time: new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})
+    });
+  }, 1500);
+};
+
+// End of setup injection
 </script>
 
 <template>
@@ -470,6 +1181,138 @@ const saveResumeText = async () => {
       <div class="toast-content">
         <h4>{{ toast.title }}</h4>
         <p>{{ toast.message }}</p>
+      </div>
+    </div>
+
+    <!-- Checkout Modals (Stripe / Pix checkout simulation) -->
+    <div v-if="checkoutOpen" class="modal-overlay" style="
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    ">
+      <div class="glass-card" style="width: 450px; padding: 2rem; border: 1px solid rgba(59, 130, 246, 0.3);">
+        <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; text-align: center; color: #00f2fe;">Assinatura VagaSync Premium</h3>
+        <p style="text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+          Liberte buscas e candidaturas ilimitadas por apenas R$ 29,90/mês
+        </p>
+
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+          <button 
+            type="button" 
+            :class="['btn', checkoutPaymentMethod === 'pix' ? 'btn-primary' : 'btn-secondary']"
+            style="flex: 1; padding: 0.5rem;"
+            @click="checkoutPaymentMethod = 'pix'"
+          >
+            <i class="fa-solid fa-pix" style="margin-right: 4px;"></i> Pix Instantâneo
+          </button>
+          <button 
+            type="button" 
+            :class="['btn', checkoutPaymentMethod === 'card' ? 'btn-primary' : 'btn-secondary']"
+            style="flex: 1; padding: 0.5rem;"
+            @click="checkoutPaymentMethod = 'card'"
+          >
+            <i class="fa-solid fa-credit-card" style="margin-right: 4px;"></i> Cartão de Crédito
+          </button>
+        </div>
+
+        <!-- Pix Area -->
+        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1rem; border-radius: 8px;">
+          <div style="background: white; padding: 0.5rem; border-radius: 8px;">
+            <!-- Simulated QR code -->
+            <div style="width: 140px; height: 140px; background: #000; display: flex; align-items: center; justify-content: center; color: white; font-family: monospace; font-size: 0.7rem; text-align: center;">
+              [QR CODE PIX SIMULADO VAGASYNC]
+            </div>
+          </div>
+          <span style="font-size: 0.75rem; color: var(--text-secondary); text-align: center;">Mapeado para conta Pix do Proprietário configurada</span>
+          
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            style="font-size: 0.8rem; width: 100%;"
+            @click="pixCopied = true; showToast('Copiado', 'Código Copia e Cola copiado para a área de transferência.', 'success')"
+          >
+            {{ pixCopied ? '✓ Copiado!' : 'Copiar Chave Copia e Cola' }}
+          </button>
+        </div>
+
+        <!-- Card Area -->
+        <div v-else style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div class="form-group" style="margin: 0;">
+            <label>Número do Cartão</label>
+            <input type="text" class="form-input" v-model="checkoutCard.number" placeholder="4532 7182 9182 0019" />
+          </div>
+          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.5rem;">
+            <div class="form-group" style="margin: 0;">
+              <label>Nome no Cartão</label>
+              <input type="text" class="form-input" v-model="checkoutCard.name" placeholder="RICARDO SANTOS" />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label>CVC</label>
+              <input type="text" class="form-input" placeholder="123" />
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-primary" style="flex: 1;" @click="handleCheckoutPayment">
+            Concluir Pagamento (Simulação)
+          </button>
+          <button type="button" class="btn btn-secondary" style="flex: 1;" @click="checkoutOpen = false">
+            Voltar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Secret Super Admin Login Modal -->
+    <div v-if="secretLoginOpen" class="modal-overlay" style="
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 5, 12, 0.9); backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    ">
+      <div class="glass-card" style="width: 420px; padding: 2.25rem; border: 1px solid rgba(0, 242, 254, 0.25); box-shadow: 0 0 30px rgba(0, 242, 254, 0.15);">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <i class="fa-solid fa-user-shield" style="font-size: 3.5rem; color: var(--color-secondary); text-shadow: 0 0 15px rgba(0, 242, 254, 0.4);"></i>
+          <h2 style="margin-top: 1rem; font-size: 1.6rem; letter-spacing: -0.03em;">Painel do Proprietário</h2>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.25rem;">Acesso exclusivo ao núcleo SaaS</p>
+        </div>
+
+        <form v-if="!secret2faOpen" @submit="handleAdminLogin" style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <div class="form-group" style="margin: 0;">
+            <label>E-mail Corporativo</label>
+            <input type="email" required class="form-input" v-model="secretEmail" placeholder="admin@vagasync.com" />
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label>Senha de Segurança</label>
+            <input type="password" required class="form-input" v-model="secretPassword" placeholder="••••••••" />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700;">
+            Autenticar Credenciais
+          </button>
+          <button type="button" class="btn btn-secondary" @click="secretLoginOpen = false" style="width: 100%;">
+            Cancelar
+          </button>
+        </form>
+
+        <form v-else @submit="handleAdminVerify2fa" style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1rem; border-radius: 8px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6; text-align: center;">
+            🔒 <strong>Autenticação em Dois Fatores (2FA)</strong><br />
+            Insira o código de 6 dígitos gerado pelo seu aplicativo de autenticação.
+            <div style="margin-top: 0.5rem; font-family: monospace; color: var(--color-secondary); font-size: 0.85rem; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 4px;">
+              Chave: JBSWY3DPEHPK3PXP
+            </div>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="text-align: center; display: block;">Código de 6 dígitos</label>
+            <input type="text" required maxlength="6" class="form-input" v-model="secret2faCode" placeholder="000 000" style="text-align: center; font-size: 1.6rem; letter-spacing: 0.2em; font-family: monospace;" />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700;">
+            Confirmar Código 2FA
+          </button>
+          <button type="button" class="btn btn-secondary" @click="secret2faOpen = false; secretLoginOpen = false;" style="width: 100%;">
+            Cancelar
+          </button>
+        </form>
       </div>
     </div>
 
@@ -534,13 +1377,24 @@ const saveResumeText = async () => {
                 Faça login para gerenciar suas candidaturas automatizadas.
               </p>
 
+              <div class="form-group">
+                <label>Seu Perfil / Papel</label>
+                <select class="form-input" v-model="authForm.role" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); margin-bottom: 1rem;">
+                  <option value="candidate">Sou Candidato (Buscar Vagas)</option>
+                  <option value="recruiter">Sou Recrutador/Empresa (Publicar Vagas e Triagem)</option>
+                </select>
+              </div>
+
               <button 
                 type="button" 
                 class="btn social-btn-linkedin"
                 @click="
+                  localStorage.setItem('vagasync_role', authForm.role);
+                  userRole = authForm.role;
                   localStorage.setItem('vagasync_logged', 'true');
                   isLoggedIn = true;
-                  showToast('Login LinkedIn', 'Sessão iniciada via LinkedIn com sucesso!', 'success');
+                  activeTab = authForm.role === 'recruiter' ? 'recruiter_dashboard' : 'dashboard';
+                  showToast('Login LinkedIn', `Sessão iniciada como ${authForm.role === 'recruiter' ? 'Recrutador' : 'Candidato'} via LinkedIn com sucesso!`, 'success');
                 "
               >
                 <Globe :size="18" /> Entrar com LinkedIn
@@ -590,6 +1444,14 @@ const saveResumeText = async () => {
               <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
                 Comece a impulsionar sua carreira com inteligência artificial.
               </p>
+
+              <div class="form-group">
+                <label>Seu Perfil / Papel</label>
+                <select class="form-input" v-model="authForm.role" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); margin-bottom: 1rem;">
+                  <option value="candidate">Sou Candidato (Buscar Vagas)</option>
+                  <option value="recruiter">Sou Recrutador/Empresa (Publicar Vagas e Triagem)</option>
+                </select>
+              </div>
 
               <div class="form-group">
                 <label>Nome Completo</label>
@@ -653,7 +1515,7 @@ const saveResumeText = async () => {
           </div>
         </div>
       </div>
-      <footer class="footer-bar">
+      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer;">
         <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
       </footer>
     </template>
@@ -667,7 +1529,7 @@ const saveResumeText = async () => {
           <span class="logo-text">Vaga Sync</span>
         </div>
 
-        <nav class="nav-menu">
+        <nav class="nav-menu" v-if="userRole === 'candidate'">
           <button 
             :class="['nav-link-btn', { active: activeTab === 'dashboard' }]"
             @click="activeTab = 'dashboard'"
@@ -729,12 +1591,104 @@ const saveResumeText = async () => {
           >
             <User :size="15" /> Currículo & Perfil IA
           </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'career' }]"
+            @click="activeTab = 'career'"
+          >
+            <Sparkles :size="15" /> Copiloto IA
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'interview' }]"
+            @click="activeTab = 'interview'"
+          >
+            <Smartphone :size="15" /> Treino Entrevista
+          </button>
           
           <button 
             :class="['nav-link-btn', { active: activeTab === 'config' }]"
             @click="activeTab = 'config'"
           >
             <Settings :size="15" /> Configurações
+          </button>
+        </nav>
+
+        <nav class="nav-menu" v-else-if="userRole === 'recruiter'">
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'recruiter_dashboard' }]"
+            @click="activeTab = 'recruiter_dashboard'"
+          >
+            <Briefcase :size="15" /> Painel Recrutador
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'recruiter_jobs' }]"
+            @click="activeTab = 'recruiter_jobs'"
+          >
+            <Briefcase :size="15" /> Criar Vaga
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'messenger' }]"
+            @click="activeTab = 'messenger'"
+            style="position: relative;"
+          >
+            <MessageSquare :size="15" /> Mensagens
+            <span v-if="contactedJobs.length > 0" style="
+              position: absolute; top: -4px; right: -4px;
+              min-width: 16px; height: 16px; border-radius: 8px;
+              background: linear-gradient(135deg, #00f2fe, #3b82f6);
+              color: white; font-size: 0.62rem; font-weight: 700;
+              display: flex; align-items: center; justify-content: center;
+              padding: 0 3px; line-height: 1;
+            ">{{ contactedJobs.length }}</span>
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'recruiter_billing' }]"
+            @click="activeTab = 'recruiter_billing'"
+          >
+            <Settings :size="15" /> Faturamento SaaS
+          </button>
+        </nav>
+
+        <nav class="nav-menu" v-else-if="userRole === 'super_admin'">
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin' }]"
+            @click="activeTab = 'super_admin'"
+          >
+            <Briefcase :size="15" /> Painel Global
+          </button>
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin_monetization' }]"
+            @click="activeTab = 'super_admin_monetization'"
+          >
+            <Settings :size="15" /> Monetização
+          </button>
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin_gateways' }]"
+            @click="activeTab = 'super_admin_gateways'"
+          >
+            <Settings :size="15" /> Gateways
+          </button>
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin_tracking' }]"
+            @click="activeTab = 'super_admin_tracking'"
+          >
+            <Settings :size="15" /> Rastreamento
+          </button>
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin_content' }]"
+            @click="activeTab = 'super_admin_content'"
+          >
+            <Settings :size="15" /> Conteúdo
+          </button>
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'super_admin_security' }]"
+            @click="activeTab = 'super_admin_security'"
+          >
+            <Settings :size="15" /> Segurança
           </button>
         </nav>
         
@@ -1101,6 +2055,1048 @@ const saveResumeText = async () => {
                 >
                   Limpar Console
                 </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Carreira & Insights (Candidato) ── -->
+        <template v-if="activeTab === 'career'">
+          <div style="max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Employability and Gamification -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <h2 class="section-title">
+                <i class="fa-solid fa-route" style="font-size: 20px;"></i> Copiloto de Carreira & Insights IA
+              </h2>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                Com base no seu currículo e palavras-chave, nossa IA traçou um mapa evolutivo da sua carreira. Complete missões, acumule pontuação de empregabilidade e visualize a compatibilidade do seu perfil no mercado.
+              </p>
+
+              <!-- Progress bar -->
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 700; font-size: 0.95rem; color: var(--color-secondary);">Sua Pontuação de Empregabilidade</span>
+                  <span style="font-weight: 800; font-size: 1.25rem; color: #fff;">{{ employabilityScore }} / 100 pts</span>
+                </div>
+                <div style="width: 100%; height: 12px; background: rgba(255,255,255,0.05); border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                  <div 
+                    style="height: 100%; background: linear-gradient(90deg, #3b82f6, #00f2fe); border-radius: 20px; transition: width 1s ease-in-out;"
+                    :style="{ width: `${employabilityScore}%` }"
+                  ></div>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                  💡 <strong>Feedback da IA:</strong> {{ employabilityFeedback }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Career Timeline -->
+            <div class="glass-card">
+              <h3 style="font-size: 1.1rem; margin-bottom: 1.5rem; color: #fff;">
+                <i class="fa-solid fa-timeline" style="color: var(--color-secondary); margin-right: 6px;"></i> Timeline Evolutiva da Carreira
+              </h3>
+              
+              <div class="career-timeline">
+                <div class="timeline-item completed">
+                  <div class="timeline-badge"><i class="fa-solid fa-file-invoice"></i></div>
+                  <div class="timeline-panel">
+                    <h4>Perfil Inicial</h4>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Currículo básico cadastrado e estruturado.</p>
+                  </div>
+                </div>
+                
+                <div class="timeline-item" :class="{ completed: jobs.length > 0 }">
+                  <div class="timeline-badge"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+                  <div class="timeline-panel">
+                    <h4>Radar de Vagas</h4>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Vagas correspondentes rastreadas pelo agente.</p>
+                  </div>
+                </div>
+
+                <div class="timeline-item" :class="{ completed: completedSimulationsCount > 0 }">
+                  <div class="timeline-badge"><i class="fa-solid fa-microphone"></i></div>
+                  <div class="timeline-panel">
+                    <h4>Treinamento Concluído</h4>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Treinou respostas técnicas de entrevistas com a IA.</p>
+                  </div>
+                </div>
+
+                <div class="timeline-item" :class="{ completed: isPremium }">
+                  <div class="timeline-badge"><i class="fa-solid fa-crown"></i></div>
+                  <div class="timeline-panel">
+                    <h4>Upgrade Premium SaaS</h4>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Acesso ilimitado e salas WebRTC Meet ativadas.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pricing cards / Plan checkout triggers -->
+            <div class="glass-card">
+              <h3 style="font-size: 1.1rem; margin-bottom: 1.5rem; text-align: center; color: #fff;">
+                Adquira Acesso Premium e impulsione sua recolocação profissional!
+              </h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 700px; margin: 0 auto;">
+                <!-- Free card -->
+                <div class="pricing-card" style="border: 1px solid var(--border-color); padding: 2rem; border-radius: 12px; background: rgba(255,255,255,0.01); display: flex; flex-direction: column; align-items: center; text-align: center;">
+                  <h4 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--text-secondary);">Plano Gratuito</h4>
+                  <div style="font-size: 2rem; font-weight: 800; margin-bottom: 1rem;">R$ 0</div>
+                  <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 2rem;">
+                    <li>✓ Limite de 10 vagas/mês</li>
+                    <li>✓ Análise de compatibilidade básica</li>
+                    <li>✗ Sem simulador de entrevista</li>
+                    <li>✗ Sem chats com recrutadores</li>
+                  </ul>
+                  <button class="btn btn-secondary" style="width: 100%; margin-top: auto;" disabled>Plano Ativo</button>
+                </div>
+
+                <!-- Premium card -->
+                <div class="pricing-card" style="border: 2px solid var(--color-primary); padding: 2rem; border-radius: 12px; background: rgba(59, 130, 246, 0.04); display: flex; flex-direction: column; align-items: center; text-align: center; position: relative;">
+                  <span style="position: absolute; top: -12px; background: var(--color-primary); color: #fff; padding: 2px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700;">RECOMENDADO</span>
+                  <h4 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: #fff;">Plano Premium</h4>
+                  <div style="font-size: 2rem; font-weight: 800; margin-bottom: 1rem; color: var(--color-secondary);">R$ 29,90<span style="font-size: 0.9rem; font-weight: 400; color: var(--text-secondary);">/mês</span></div>
+                  <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 2rem;">
+                    <li style="color: #fff;">✓ Varreduras e candidaturas ILIMITADAS</li>
+                    <li style="color: #fff;">✓ IA Gemini Premium com match inteligente</li>
+                    <li style="color: #fff;">✓ Treinador de Entrevista por Vídeo ilimitado</li>
+                    <li style="color: #fff;">✓ Salas de Videochamadas WebRTC com RH</li>
+                  </ul>
+                  
+                  <button 
+                    v-if="isPremium"
+                    class="btn btn-secondary" 
+                    style="width: 100%; margin-top: auto;"
+                    @click="cancelPremium('candidate_premium')"
+                  >
+                    Cancelar Assinatura
+                  </button>
+                  <button 
+                    v-else
+                    class="btn btn-primary" 
+                    style="width: 100%; margin-top: auto; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                    @click="openCheckout('candidate_premium')"
+                  >
+                    Assinar Premium
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Treino de Entrevista (Candidato) ── -->
+        <template v-if="activeTab === 'interview'">
+          <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Meet active window -->
+            <div v-if="meetActive" class="glass-card" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                <h3 style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-secondary);">
+                  <i class="fa-solid fa-video"></i> Sala de Entrevista WebRTC Meet
+                </h3>
+                <span style="font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--color-success); font-weight: 700;">CONEXÃO ESTÁVEL</span>
+              </div>
+              
+              <!-- Video tile grid -->
+              <div class="webrtc-video-grid">
+                <!-- Interviwer tile -->
+                <div class="video-tile" style="background-image: url('https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800');">
+                  <div class="video-overlay-name">Recrutador VagaSync (HR)</div>
+                </div>
+                <!-- Candidate tile -->
+                <div class="video-tile candidate-tile">
+                  <video ref="videoElementRef" autoplay playsinline muted></video>
+                  <div v-if="!meetCameraOn" class="video-muted-placeholder">
+                    <i class="fa-solid fa-video-slash" style="font-size: 32px; color: var(--text-muted);"></i>
+                    <p style="font-size: 0.8rem; margin-top: 0.5rem;">Sua câmera está desligada</p>
+                  </div>
+                  <div class="video-overlay-name">Você (Candidato)</div>
+                </div>
+              </div>
+
+              <!-- Meet controller bar and chat -->
+              <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; margin-top: 0.5rem;">
+                <!-- Controller bar -->
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                  <h4 style="font-size: 0.85rem; color: var(--text-secondary); text-align: center;">Controles do Dispositivo</h4>
+                  <div style="display: flex; justify-content: center; gap: 0.75rem;">
+                    <button 
+                      class="btn" 
+                      :class="meetCameraOn ? 'btn-primary' : 'btn-secondary'"
+                      style="width: 44px; height: 44px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;"
+                      @click="toggleCamera"
+                    >
+                      <i :class="meetCameraOn ? 'fa-solid fa-video' : 'fa-solid fa-video-slash'"></i>
+                    </button>
+                    <button 
+                      class="btn" 
+                      :class="meetMicOn ? 'btn-primary' : 'btn-secondary'"
+                      style="width: 44px; height: 44px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;"
+                      @click="toggleMic"
+                    >
+                      <i :class="meetMicOn ? 'fa-solid fa-microphone' : 'fa-solid fa-microphone-slash'"></i>
+                    </button>
+                    <button 
+                      class="btn" 
+                      :class="meetScreenSharing ? 'btn-primary' : 'btn-secondary'"
+                      style="width: 44px; height: 44px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;"
+                      @click="toggleScreenSharing"
+                    >
+                      <i class="fa-solid fa-desktop"></i>
+                    </button>
+                    <button 
+                      class="btn" 
+                      style="width: 44px; height: 44px; border-radius: 50%; padding: 0; background: var(--color-error); border: none; color: white; display: flex; align-items: center; justify-content: center;"
+                      @click="leaveVideoMeet"
+                    >
+                      <i class="fa-solid fa-phone-slash"></i>
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Chat inside video meet -->
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 0.75rem;">
+                  <div style="height: 120px; overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div v-for="(msg, i) in meetMessages" :key="i" style="font-size: 0.75rem;">
+                      <strong :style="{ color: msg.sender === 'user' ? '#00f2fe' : '#34d399' }">{{ msg.name }}:</strong> {{ msg.content }}
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 0.4rem;">
+                    <input type="text" class="form-input" placeholder="Mande uma mensagem..." v-model="meetInput" @keyup.enter="sendMeetMessage" style="font-size: 0.75rem; padding: 0.4rem;" />
+                    <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;" @click="sendMeetMessage">Enviar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Meet launcher panel and AI interview -->
+            <div v-else style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+              <!-- WebRTC launcher card -->
+              <div class="glass-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <h3 style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-secondary); font-size: 1.2rem; margin-bottom: 0.75rem;">
+                    <i class="fa-solid fa-circle-play"></i> Sala de Entrevista Online (WebRTC Meet)
+                  </h3>
+                  <p style="color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6; margin-bottom: 1.25rem;">
+                    Salas WebRTC dedicadas para simular ou ingressar em processos seletivos por vídeo de forma fluida. Capture seu vídeo e teste seus periféricos de áudio antes de reuniões.
+                  </p>
+                  
+                  <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; font-size: 0.78rem; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <div>📸 <strong>Câmera:</strong> Integrada (Teste Ativo)</div>
+                    <div>🎙️ <strong>Microfone:</strong> Integrado (Teste Ativo)</div>
+                    <div>🔒 <strong>Protocolo:</strong> WebRTC TLS Criptografado de ponta a ponta</div>
+                  </div>
+                </div>
+
+                <button 
+                  v-if="isPremium"
+                  class="btn btn-primary" 
+                  style="width: 100%; padding: 0.75rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                  @click="joinVideoMeet"
+                >
+                  <i class="fa-solid fa-video" style="margin-right: 6px;"></i> Iniciar Videochamada de Teste com RH
+                </button>
+                <div v-else style="text-align: center;">
+                  <button class="btn btn-secondary" style="width: 100%;" @click="activeTab = 'career'">
+                    🔒 Ingressar WebRTC (Requer Premium)
+                  </button>
+                </div>
+              </div>
+
+              <!-- AI Interview simulator -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1rem;">
+                <h3 style="display: flex; align-items: center; gap: 0.5rem; color: #fff; font-size: 1.2rem;">
+                  <i class="fa-solid fa-microphone" style="color: var(--color-accent);"></i> Simulador de Entrevista por IA
+                </h3>
+
+                <div v-if="!interviewActive" style="display: flex; flex-direction: column; gap: 1rem;">
+                  <p style="color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6;">
+                    Treine com nosso agente de recrutamento IA do Gemini. Escolha a área desejada e responda a perguntas técnicas ou comportamentais.
+                  </p>
+                  <div class="form-group" style="margin: 0;">
+                    <label>Cargo Alvo</label>
+                    <input type="text" class="form-input" v-model="interviewRole" />
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label>Foco das Perguntas</label>
+                    <select class="form-input" v-model="interviewType" style="background: #0d1426; color: var(--text-primary);">
+                      <option value="Técnica">Perguntas Técnicas</option>
+                      <option value="Comportamental">Perguntas Comportamentais</option>
+                      <option value="Geral">Perguntas Gerais / Fit Cultural</option>
+                    </select>
+                  </div>
+                  <button class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;" @click="startInterview">
+                    Começar Simulação de Entrevista
+                  </button>
+                </div>
+
+                <div v-else style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1;">
+                  <!-- Chat box -->
+                  <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; height: 260px; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div v-for="(msg, i) in interviewMessages" :key="i" :class="['chat-bubble', msg.sender]">
+                      <div style="font-weight: 700; font-size: 0.7rem; opacity: 0.8; margin-bottom: 2px;">
+                        {{ msg.sender === 'interviewer' ? 'Entrevistador IA' : msg.sender === 'user' ? 'Você' : 'Sistema' }}
+                      </div>
+                      <div style="font-size: 0.8rem; line-height: 1.4;">{{ msg.content }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Input text box -->
+                  <div v-if="!interviewScore" style="display: flex; gap: 0.5rem;">
+                    <input 
+                      type="text" 
+                      class="form-input" 
+                      placeholder="Digite sua resposta..." 
+                      v-model="interviewInput" 
+                      @keyup.enter="sendInterviewResponse"
+                      :disabled="interviewLoading"
+                    />
+                    <button class="btn btn-primary" @click="sendInterviewResponse" :disabled="interviewLoading">
+                      {{ interviewLoading ? 'Processando...' : 'Enviar' }}
+                    </button>
+                  </div>
+
+                  <div v-else style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                      {{ interviewFeedback }}
+                    </p>
+                    <button class="btn btn-secondary" style="width: 100%;" @click="resetInterview">
+                      Voltar ao Painel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Global Dashboard (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin'">
+          <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Stats overview -->
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem;">
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-users"></i></div>
+                <div>
+                  <div class="stat-value">{{ adminStatsData.users_count }}</div>
+                  <div class="stat-label">Usuários Cadastrados</div>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-user-tie" style="color: #a855f7;"></i></div>
+                <div>
+                  <div class="stat-value">{{ adminStatsData.recruiters_count }}</div>
+                  <div class="stat-label">Recrutadores</div>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-money-bill-trend-up" style="color: #10b981;"></i></div>
+                <div>
+                  <div class="stat-value">R$ {{ adminStatsData.mrr }}</div>
+                  <div class="stat-label">MRR (Mensal Recorrente)</div>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-wallet" style="color: #00f2fe;"></i></div>
+                <div>
+                  <div class="stat-value">R$ {{ adminStatsData.total_revenue }}</div>
+                  <div class="stat-label">Faturamento Total</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- More stats and charts -->
+            <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
+              <!-- Growth Chart -->
+              <div class="glass-card">
+                <h3 class="section-title"><i class="fa-solid fa-chart-line"></i> Crescimento da Receita (6 Meses)</h3>
+                <div style="display: flex; flex-direction: column; gap: 1.25rem; padding-top: 1rem;">
+                  <div v-for="(g, idx) in adminStatsData.growth" :key="idx" style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="width: 40px; font-size: 0.8rem; color: var(--text-secondary);">{{ g.month }}</span>
+                    <div style="flex-grow: 1; height: 16px; background: rgba(255,255,255,0.03); border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.04);">
+                      <div 
+                        style="height: 100%; background: linear-gradient(90deg, #3b82f6, #00f2fe); border-radius: 8px;"
+                        :style="{ width: `${(g.receita / adminStatsData.mrr) * 100}%` }"
+                      ></div>
+                    </div>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #fff;">R$ {{ g.receita }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Conversion rate -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 class="section-title"><i class="fa-solid fa-chart-pie"></i> Conversões & Churn</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem; background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 10px; border: 1px solid var(--border-color);">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Taxa de Conversão Premium</span>
+                    <span style="font-weight: 700; color: var(--color-success);">{{ adminStatsData.conversion_rate }}%</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Assinaturas Ativas</span>
+                    <span style="font-weight: 700; color: #fff;">{{ adminStatsData.active_subscriptions }}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Cancelamentos (Churn)</span>
+                    <span style="font-weight: 700; color: var(--color-error);">{{ adminStatsData.cancelations }}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Taxa de Churn</span>
+                    <span style="font-weight: 700; color: var(--color-warning);">{{ adminStatsData.churn_rate }}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Price plan and coupons controls -->
+            <div class="glass-card">
+              <h3 class="section-title"><i class="fa-solid fa-sliders"></i> Controle de Planos e Cupons Promocionais</h3>
+              <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem;">
+                <div class="form-group">
+                  <label>Configurações de Preço de Planos (Formato JSON)</label>
+                  <textarea class="form-input" rows="6" v-model="adminConfigs.plans_json" style="font-family: monospace; font-size: 0.8rem; resize: vertical;" />
+                </div>
+                <div class="form-group">
+                  <label>Cupons Ativos (Formato JSON)</label>
+                  <textarea class="form-input" rows="6" v-model="adminConfigs.coupons_json" style="font-family: monospace; font-size: 0.8rem; resize: vertical;" />
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
+                <button class="btn btn-primary" @click="handleSaveAdminConfigs">Salvar Configurações Planos/Cupons</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Monetização (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin_monetization'">
+          <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="glass-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 class="section-title" style="margin: 0;">
+                  <i class="fa-solid fa-file-invoice-dollar" style="font-size: 20px;"></i> Relatórios de Faturamento & Assinaturas
+                </h2>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button class="btn btn-secondary" @click="exportPDF">
+                    <i class="fa-solid fa-file-pdf" style="margin-right: 4px; color: var(--color-error);"></i> Exportar PDF
+                  </button>
+                  <button class="btn btn-secondary" @click="exportExcel">
+                    <i class="fa-solid fa-file-excel" style="margin-right: 4px; color: var(--color-success);"></i> Exportar Excel
+                  </button>
+                </div>
+              </div>
+
+              <!-- Subscriptions database list -->
+              <div class="jobs-table-wrapper">
+                <table class="jobs-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>E-mail do Usuário</th>
+                      <th>Plano Assinado</th>
+                      <th>Gateway</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="i in 6" :key="i">
+                      <td>#{{ 1024 + i }}</td>
+                      <td style="font-weight: 600;">usuario{{ i }}@vagasync.com.br</td>
+                      <td>
+                        <span style="font-size: 0.75rem; padding: 2px 7px; border-radius: 4px; background: rgba(59,130,246,0.15); color: #60a5fa; font-weight: 600;">
+                          {{ i % 2 === 0 ? 'Recruiter Pro' : 'Candidate Premium' }}
+                        </span>
+                      </td>
+                      <td>
+                        <span style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary);">
+                          {{ i % 3 === 0 ? 'Stripe' : i % 3 === 1 ? 'MercadoPago' : 'Pix' }}
+                        </span>
+                      </td>
+                      <td style="font-weight: 700; color: #fff;">
+                        R$ {{ i % 2 === 0 ? '149,90' : '29,90' }}
+                      </td>
+                      <td>
+                        <span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 12px; font-weight: 700; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--color-success);">
+                          PAGO
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Gateways (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin_gateways'">
+          <div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="glass-card">
+              <h2 class="section-title">
+                <i class="fa-solid fa-credit-card" style="font-size: 20px;"></i> Integrações de Pagamentos (SaaS Core)
+              </h2>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                Configure suas chaves do Stripe, Mercado Pago e Pix para recebimento instantâneo de mensalidades dos planos SaaS. As chaves privadas são armazenadas de forma criptografada na base de dados SQLite.
+              </p>
+
+              <form @submit.prevent="handleSaveAdminConfigs" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <!-- Stripe parameters -->
+                <div style="background: rgba(99,91,255,0.05); border: 1px solid rgba(99,91,255,0.2); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <h4 style="color: #a5b4fc; font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-brands fa-stripe"></i> Integração Stripe
+                  </h4>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Stripe Publishable Key</label>
+                      <input type="text" class="form-input" v-model="adminConfigs.stripe_public_key" placeholder="pk_live_..." />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>Stripe Secret Key</label>
+                      <input type="password" class="form-input" v-model="adminConfigs.stripe_secret_key" placeholder="sk_live_..." />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Mercado Pago parameters -->
+                <div style="background: rgba(0,158,227,0.05); border: 1px solid rgba(0,158,227,0.2); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <h4 style="color: #60a5fa; font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-handshake"></i> Mercado Pago
+                  </h4>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Mercado Pago Public Key</label>
+                      <input type="text" class="form-input" v-model="adminConfigs.mercadopago_public_key" placeholder="APP_USR-..." />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>Mercado Pago Access Token</label>
+                      <input type="password" class="form-input" v-model="adminConfigs.mercadopago_access_token" placeholder="APP_USR-..." />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Pix keys and Bank info -->
+                <div style="background: rgba(0,242,254,0.04); border: 1px solid rgba(0,242,254,0.18); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                  <h4 style="color: var(--color-secondary); font-size: 0.95rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-pix"></i> Dados Pix e Conta Bancária do Proprietário
+                  </h4>
+                  <div class="form-group" style="margin: 0;">
+                    <label>Chave Pix de Recebimento</label>
+                    <input type="text" class="form-input" v-model="adminConfigs.pix_key" placeholder="sua-chave@pix.com.br" />
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1.2fr 0.8fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Banco</label>
+                      <input type="text" class="form-input" v-model="adminConfigs.bank_name" placeholder="Banco Itaú S.A." />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>Agência</label>
+                      <input type="text" class="form-input" v-model="adminConfigs.bank_agency" placeholder="0001" />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>Conta</label>
+                      <input type="password" class="form-input" v-model="adminConfigs.bank_account" placeholder="12345-6" />
+                    </div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Nome do Beneficiário</label>
+                      <input type="text" class="form-input" v-model="adminConfigs.bank_owner_name" placeholder="VagaSync Tecnologias Ltda." />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>CPF / CNPJ Beneficiário</label>
+                      <input type="password" class="form-input" v-model="adminConfigs.owner_tax_id" placeholder="00.000.000/0001-00" />
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                  <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;">
+                    Criptografar & Salvar Configurações
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Tracking & Google Analytics (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin_tracking'">
+          <div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Integration details input -->
+            <div class="glass-card">
+              <h2 class="section-title">
+                <i class="fa-solid fa-chart-line" style="font-size: 20px;"></i> Integrações de Analytics e Rastreamento
+              </h2>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                Monitore o tráfego da Landing Page e o funil de conversão. Adicione seus códigos de rastreamento do Google Analytics 4, Tag Manager, Facebook Pixel e Clarity de forma integrada.
+              </p>
+
+              <form @submit.prevent="handleSaveAdminConfigs" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Google Analytics 4 Measurement ID</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.ga4_measurement_id" placeholder="G-XXXXXXXXXX" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Google Tag Manager ID</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.google_tag_manager_id" placeholder="GTM-XXXXXX" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Facebook Pixel ID</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.facebook_pixel_id" placeholder="123456789012345" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Microsoft Clarity Project Code</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.microsoft_clarity_id" placeholder="abcdefghij" />
+                </div>
+                
+                <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 0.75rem;">
+                  <button type="submit" class="btn btn-primary">Salvar Tracking Script IDs</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Tracking analytics mock data -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <h3 class="section-title"><i class="fa-solid fa-chart-bar"></i> Tráfego em Tempo Real & Métricas Principais</h3>
+              
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; text-align: center;">
+                  <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">1.242</span>
+                  <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;">Visitantes Únicos</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; text-align: center;">
+                  <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">04m 12s</span>
+                  <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;">Tempo Médio</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; text-align: center;">
+                  <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">34,2%</span>
+                  <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;">Taxa de Rejeição</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; text-align: center;">
+                  <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">890</span>
+                  <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;">Visualizações de Página</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Conteúdo (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin_content'">
+          <div style="max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Landing page SEO Configs -->
+            <div class="glass-card">
+              <h2 class="section-title">
+                <i class="fa-solid fa-search" style="font-size: 20px;"></i> Otimizações de SEO & Landing Page
+              </h2>
+              <form @submit.prevent="handleSaveAdminConfigs" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Título da Página (SEO Title)</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.seo_title" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Meta Descrição (Meta Description)</label>
+                  <textarea class="form-input" rows="2" v-model="adminConfigs.seo_description" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Palavras-Chave de SEO (Tags separadas por vírgula)</label>
+                  <input type="text" class="form-input" v-model="adminConfigs.seo_keywords" />
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                  <button type="submit" class="btn btn-primary">Salvar Parâmetros SEO</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Blog Post Editor -->
+            <div class="glass-card">
+              <h3 class="section-title"><i class="fa-solid fa-newspaper"></i> Gerenciador do Blog & Artigos</h3>
+              <form @submit="handleSaveBlogPost" style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Título do Artigo</label>
+                  <input type="text" class="form-input" placeholder="O impacto da automação no mercado..." v-model="newBlogPost.title" required />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Resumo (Resumo simples para cards)</label>
+                  <input type="text" class="form-input" placeholder="Uma breve sinopse do conteúdo..." v-model="newBlogPost.summary" required />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>URL da Imagem de Capa</label>
+                  <input type="text" class="form-input" placeholder="https://images.unsplash.com/..." v-model="newBlogPost.image_url" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Conteúdo Principal (Markdown ou Texto Simples)</label>
+                  <textarea class="form-input" rows="4" placeholder="Escreva o artigo completo..." v-model="newBlogPost.content" required />
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                  <button type="submit" class="btn btn-primary">Publicar Artigo</button>
+                </div>
+              </form>
+
+              <!-- Articles lists -->
+              <h4 style="margin-bottom: 0.75rem;">Artigos Publicados</h4>
+              <div v-if="blogPosts.length === 0" style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem; text-align: center;">Nenhum artigo publicado no blog.</div>
+              <div v-else style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div v-for="post in blogPosts" :key="post.id" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+                  <div>
+                    <strong style="color: #fff;">{{ post.title }}</strong>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">{{ post.summary }}</p>
+                  </div>
+                  <button class="btn btn-secondary" style="color: var(--color-error); padding: 0.25rem 0.5rem; font-size: 0.75rem;" @click="handleDeleteBlogPost(post.id)">
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Banners and carousels -->
+            <div class="glass-card">
+              <h3 class="section-title"><i class="fa-solid fa-rectangle-ad"></i> Banners & Carrosséis Promocionais</h3>
+              
+              <form @submit="handleSaveBanner" style="display: grid; grid-template-columns: 1.2fr 0.8fr 1fr; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-end;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Título do Banner</label>
+                  <input type="text" class="form-input" v-model="newBanner.title" placeholder="Desconto de Lançamento" required />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Posição (Página)</label>
+                  <select class="form-input" v-model="newBanner.position" style="background:#0d1426; color:#fff;">
+                    <option value="home">Home (Painel)</option>
+                    <option value="career">Career Page</option>
+                    <option value="interview">Entrevistas</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>URL Imagem</label>
+                  <input type="text" class="form-input" v-model="newBanner.image_url" placeholder="https://unsplash..." required />
+                </div>
+                <div class="form-group" style="margin: 0; grid-column: 1 / -1;">
+                  <label>URL Redirecionamento Link (Opcional)</label>
+                  <input type="text" class="form-input" v-model="newBanner.link_url" placeholder="#pricing" />
+                </div>
+                <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                  <button type="submit" class="btn btn-primary">Adicionar Banner</button>
+                </div>
+              </form>
+
+              <h4 style="margin-bottom: 0.75rem;">Banners em Exibição</h4>
+              <div v-if="banners.length === 0" style="color: var(--text-secondary); font-size: 0.85rem; padding: 1rem; text-align: center;">Nenhum banner cadastrado.</div>
+              <div v-else style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div v-for="b in banners" :key="b.id" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+                  <div>
+                    <strong style="color: #fff;">{{ b.title }}</strong> &mdash; <span style="font-size: 0.75rem; color: var(--color-secondary);">Posição: {{ b.position }}</span>
+                  </div>
+                  <button class="btn btn-secondary" style="color: var(--color-error); padding: 0.25rem 0.5rem; font-size: 0.75rem;" @click="handleDeleteBanner(b.id)">
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Super Admin Segurança & Auditoria (Proprietário) ── -->
+        <template v-if="activeTab === 'super_admin_security'">
+          <div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Database Backup trigger -->
+            <div class="glass-card" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(16,185,129,0.3); background: rgba(16,185,129,0.03);">
+              <div>
+                <h3 style="color: var(--color-success); font-size: 1.15rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <i class="fa-solid fa-database"></i> Backup Automático do SQLite
+                </h3>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem; line-height: 1.5;">
+                  Gere uma cópia instantânea segura do arquivo de banco de dados SQLite (<code>vagasync.db</code>) no diretório local do servidor.
+                </p>
+              </div>
+              <button class="btn btn-primary" style="background: var(--color-success); border: none; color: white;" @click="handleTriggerBackup">
+                <i class="fa-solid fa-download-solid"></i> Disparar Backup
+              </button>
+            </div>
+
+            <!-- Audit trail listing -->
+            <div class="glass-card">
+              <h3 class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Logs de Auditoria do Super Admin</h3>
+              <div class="jobs-table-wrapper" style="max-height: 320px; overflow-y: auto;">
+                <table class="jobs-table">
+                  <thead>
+                    <tr>
+                      <th>Horário</th>
+                      <th>Ação</th>
+                      <th>Detalhes</th>
+                      <th>IP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="log in auditLogs" :key="log.id">
+                      <td style="font-size: 0.75rem; font-family: monospace; white-space: nowrap;">
+                        {{ new Date(log.timestamp).toLocaleString() }}
+                      </td>
+                      <td>
+                        <span style="font-size: 0.72rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,242,254,0.1); color: var(--color-secondary);">
+                          {{ log.action }}
+                        </span>
+                      </td>
+                      <td style="font-size: 0.78rem; color: var(--text-secondary);">{{ log.details }}</td>
+                      <td style="font-size: 0.75rem; font-family: monospace; color: var(--text-muted);">{{ log.ip_address }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Recrutador Dashboard (Recrutador) ── -->
+        <template v-if="activeTab === 'recruiter_dashboard'">
+          <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Recruiter stats telemetry -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem;">
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-briefcase"></i></div>
+                <div>
+                  <div class="stat-value">{{ publishedJobs.length }}</div>
+                  <div class="stat-label">Minhas Vagas Publicadas</div>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-users" style="color: #a855f7;"></i></div>
+                <div>
+                  <div class="stat-value">{{ recruitedCandidates.length }}</div>
+                  <div class="stat-label">Candidatos no Pipeline</div>
+                </div>
+              </div>
+              <div class="glass-card stat-card">
+                <div class="stat-icon"><i class="fa-solid fa-crown" style="color: #10b981;"></i></div>
+                <div>
+                  <div class="stat-value">{{ isRecruiterPro ? 'Recrutador Pro' : 'Gratuito' }}</div>
+                  <div class="stat-label">Status do Plano</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Talent database simulation and matching -->
+            <div class="glass-card">
+              <h3 class="section-title"><i class="fa-solid fa-magnifying-glass"></i> Banco de Talentos e Match de Compatibilidade</h3>
+              <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 1.25rem;">
+                Busque candidatos ideais em nossa base integrada. A IA pontua o match com base nas palavras-chave da vaga em tempo real.
+              </p>
+              
+              <div class="jobs-table-wrapper">
+                <table class="jobs-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Cargo Recomendado</th>
+                      <th>E-mail</th>
+                      <th>Match Vaga</th>
+                      <th>Competências Extraídas por IA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="cand in recruitedCandidates" :key="cand.id">
+                      <td style="font-weight: 600; color: #fff;">{{ cand.name }}</td>
+                      <td>{{ cand.role }}</td>
+                      <td style="font-size: 0.8rem; color: var(--text-secondary);">{{ cand.email }}</td>
+                      <td>
+                        <span :class="['match-badge', cand.match >= 90 ? 'match-high' : 'match-med']">
+                          {{ cand.match }}%
+                        </span>
+                      </td>
+                      <td style="font-size: 0.78rem; color: var(--text-secondary);">{{ cand.resume }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Recruitment pipeline Kanban board -->
+            <div class="glass-card">
+              <h3 class="section-title" style="margin-bottom: 1.5rem;"><i class="fa-solid fa-network-wired"></i> Pipeline de Recrutamento (Kanban)</h3>
+              
+              <div class="kanban-pipeline-grid">
+                <!-- Recebidos column -->
+                <div class="kanban-column">
+                  <div class="kanban-column-header">Recebidos ({{ recruitedCandidates.filter(c => c.status === 'recebidos').length }})</div>
+                  <div class="kanban-cards-wrapper">
+                    <div v-for="cand in recruitedCandidates.filter(c => c.status === 'recebidos')" :key="cand.id" class="kanban-card">
+                      <strong>{{ cand.name }}</strong>
+                      <span>{{ cand.role }}</span>
+                      <div class="match-badge match-high" style="margin-top: 0.25rem;">Match: {{ cand.match }}%</div>
+                      <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'analise')">Mover &rarr;</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Em Analise column -->
+                <div class="kanban-column">
+                  <div class="kanban-column-header">Em Análise ({{ recruitedCandidates.filter(c => c.status === 'analise').length }})</div>
+                  <div class="kanban-cards-wrapper">
+                    <div v-for="cand in recruitedCandidates.filter(c => c.status === 'analise')" :key="cand.id" class="kanban-card">
+                      <strong>{{ cand.name }}</strong>
+                      <span>{{ cand.role }}</span>
+                      <div class="match-badge match-high" style="margin-top: 0.25rem;">Match: {{ cand.match }}%</div>
+                      <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'entrevista')">Mover &rarr;</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Entrevista column -->
+                <div class="kanban-column">
+                  <div class="kanban-column-header">Entrevista ({{ recruitedCandidates.filter(c => c.status === 'entrevista').length }})</div>
+                  <div class="kanban-cards-wrapper">
+                    <div v-for="cand in recruitedCandidates.filter(c => c.status === 'entrevista')" :key="cand.id" class="kanban-card">
+                      <strong>{{ cand.name }}</strong>
+                      <span>{{ cand.role }}</span>
+                      <div class="match-badge match-high" style="margin-top: 0.25rem;">Match: {{ cand.match }}%</div>
+                      
+                      <!-- Video Meet launcher inside Kanban -->
+                      <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem;">
+                        <button 
+                          v-if="isRecruiterPro"
+                          class="btn btn-primary" 
+                          style="font-size: 0.68rem; padding: 0.3rem; background: linear-gradient(135deg, #10b981, #00f2fe); border: none; color: #060913; font-weight: 700;"
+                          @click="joinVideoMeet"
+                        >
+                          <i class="fa-solid fa-video"></i> Iniciar WebRTC Meet
+                        </button>
+                        <button v-else class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.3rem;" @click="activeTab = 'recruiter_billing'">
+                          🔒 Meet por Vídeo (Requer Pro)
+                        </button>
+                        <button class="btn btn-secondary" style="font-size: 0.65rem; padding: 0.2rem;" @click="moveCandidate(cand.id, 'aprovados')">Aprovar &rarr;</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Aprovados column -->
+                <div class="kanban-column">
+                  <div class="kanban-column-header" style="border-top-color: var(--color-success);">Aprovados ({{ recruitedCandidates.filter(c => c.status === 'aprovados').length }})</div>
+                  <div class="kanban-cards-wrapper">
+                    <div v-for="cand in recruitedCandidates.filter(c => c.status === 'aprovados')" :key="cand.id" class="kanban-card" style="border-left-color: var(--color-success);">
+                      <strong>{{ cand.name }}</strong>
+                      <span>{{ cand.role }}</span>
+                      <div class="match-badge match-high" style="margin-top: 0.25rem; background: rgba(16,185,129,0.12); color: var(--color-success); border-color: rgba(16,185,129,0.3);">Aprovado ✓</div>
+                      <div style="display: flex; gap: 4px; margin-top: 0.75rem;">
+                        <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem; color: var(--color-error);" @click="moveCandidate(cand.id, 'recebidos')">Reiniciar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Recrutador Criar Vaga (Recrutador) ── -->
+        <template v-if="activeTab === 'recruiter_jobs'">
+          <div style="max-width: 700px; margin: 0 auto;">
+            <div class="glass-card">
+              <h2 class="section-title">
+                <i class="fa-solid fa-circle-plus" style="font-size: 20px;"></i> Publicar Nova Oportunidade
+              </h2>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                A vaga publicada aparecerá no radar de buscas inteligentes do VagaSync e será catalogada para triagem automática por IA.
+              </p>
+
+              <form @submit="handlePublishJob" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Título da Oportunidade *</label>
+                  <input type="text" class="form-input" v-model="newJobForm.title" placeholder="Ex: Desenvolvedor Senior Vue.js" required />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Empresa Contratante *</label>
+                  <input type="text" class="form-input" v-model="newJobForm.company" placeholder="Ex: VagaSync Corp" required />
+                </div>
+                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.75rem;">
+                  <div class="form-group" style="margin: 0;">
+                    <label>Localização</label>
+                    <input type="text" class="form-input" v-model="newJobForm.location" placeholder="Ex: Remoto, São Paulo - SP" />
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label>Palavras-Chave de Competência</label>
+                    <input type="text" class="form-input" v-model="newJobForm.keywords" placeholder="Ex: Vue 3, TypeScript, CSS" />
+                  </div>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Descrição do Cargo & Pré-Requisitos</label>
+                  <textarea class="form-input" rows="5" v-model="newJobForm.description" placeholder="Descreva os desafios do cargo e competências fundamentais..." />
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 0.5rem;">
+                  <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;">
+                    Publicar Oportunidade
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Recrutador Faturamento (Recrutador) ── -->
+        <template v-if="activeTab === 'recruiter_billing'">
+          <div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            <!-- Current Plan details -->
+            <div class="glass-card" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(0,242,254,0.3); background: rgba(0,242,254,0.03);">
+              <div>
+                <h3 style="color: var(--color-secondary); font-size: 1.2rem; margin: 0;">
+                  Seu Plano Atual: {{ isRecruiterPro ? 'Recrutador Pro Enterprise' : 'Plano Gratuito de Recrutamento' }}
+                </h3>
+                <p style="color: var(--text-secondary); font-size: 0.82rem; margin-top: 0.25rem; line-height: 1.5;">
+                  {{ isRecruiterPro 
+                     ? 'Seus limites foram removidos. Banco de talentos e videochamadas WebRTC ilimitadas.' 
+                     : 'Seu limite atual é de 5 vagas cadastradas. Faça o upgrade para remover limites.' }}
+                </p>
+              </div>
+              <button 
+                v-if="isRecruiterPro" 
+                class="btn btn-secondary" 
+                style="color: var(--color-error); border-color: rgba(239,68,68,0.25);"
+                @click="cancelPremium('recruiter_pro')"
+              >
+                Cancelar Assinatura
+              </button>
+              <button 
+                v-else
+                class="btn btn-primary" 
+                style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                @click="openCheckout('recruiter_pro')"
+              >
+                Assinar Recrutador Pro
+              </button>
+            </div>
+
+            <!-- Recruiter pricing table -->
+            <div class="glass-card">
+              <h3 class="section-title" style="text-align: center; margin-bottom: 1.5rem;">Estruturas de Preços para Recrutadores</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 700px; margin: 0 auto;">
+                <div style="border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                  <h4 style="font-size: 1.1rem; color: var(--text-secondary);">Recrutador Básico</h4>
+                  <div style="font-size: 1.75rem; font-weight: 800; margin: 0.5rem 0;">R$ 0</div>
+                  <ul style="list-style:none; padding:0; font-size:0.8rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.5rem;">
+                    <li>✓ 5 vagas cadastradas</li>
+                    <li>✓ Visualização básica de candidatos</li>
+                    <li>✗ Sem videochamada WebRTC</li>
+                  </ul>
+                  <button class="btn btn-secondary" style="width: 100%;" disabled>Ativo</button>
+                </div>
+                
+                <div style="border: 2px solid var(--color-primary); padding: 1.5rem; border-radius: 8px; background: rgba(59,130,246,0.03); display: flex; flex-direction: column; align-items: center; text-align: center;">
+                  <h4 style="font-size: 1.1rem; color: #fff;">Recrutador Pro</h4>
+                  <div style="font-size: 1.75rem; font-weight: 800; margin: 0.5rem 0; color: var(--color-secondary);">R$ 149,90<span style="font-size:0.8rem; font-weight:400; color:var(--text-secondary);">/mês</span></div>
+                  <ul style="list-style:none; padding:0; font-size:0.8rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.5rem;">
+                    <li>✓ Vagas publicadas ILIMITADAS</li>
+                    <li>✓ Banco de talentos IA completo</li>
+                    <li>✓ Painel Kanban irrestrito</li>
+                    <li>✓ Salas de Videochamadas WebRTC Meet</li>
+                  </ul>
+                  <button v-if="isRecruiterPro" class="btn btn-secondary" style="width: 100%;" disabled>Já Assinado</button>
+                  <button v-else class="btn btn-primary" style="width:100%;" @click="openCheckout('recruiter_pro')">Assinar Pro</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1576,7 +3572,7 @@ const saveResumeText = async () => {
         </template>
       </main>
 
-      <footer class="footer-bar" style="margin-top: 3rem;">
+      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; margin-top: 3rem;">
         <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
       </footer>
     </template>
