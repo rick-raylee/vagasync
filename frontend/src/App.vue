@@ -229,6 +229,30 @@ const simulateLinkedinLogin = () => {
   showToast('Login LinkedIn (Simulado)', 'Login de testes autorizado com sucesso.', 'success');
 };
 
+const saveCredentialsAndLoginReal = async () => {
+  if (!config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
+    showToast('Campos Requeridos', 'Por favor, preencha o Client ID e Client Secret para prosseguir.', 'error');
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config.value)
+    });
+    if (res.ok) {
+      showToast('Credenciais Salvas', 'Conectando ao LinkedIn para login real...', 'success');
+      setTimeout(() => {
+        window.location.href = `${API_BASE}/linkedin/login`;
+      }, 1000);
+    } else {
+      showToast('Erro', 'Não foi possível salvar as credenciais no backend.', 'error');
+    }
+  } catch (e) {
+    showToast('Erro de Conexão', 'Falha ao conectar com o backend.', 'error');
+  }
+};
+
 const handleLinkedinLogin = () => {
   if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
     showLinkedinSimulationModal.value = true;
@@ -1859,37 +1883,78 @@ const restoreCandidate = () => {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
       display: flex; align-items: center; justify-content: center; z-index: 10000;
+      overflow-y: auto; padding: 1rem;
     ">
-      <div class="glass-card" style="width: 450px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.3); text-align: center; display: flex; flex-direction: column; gap: 1.25rem;">
-        <div style="background: rgba(10, 102, 194, 0.1); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-          <Globe :size="30" style="color: #60a5fa;" />
+      <div class="glass-card" style="width: 460px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.3); display: flex; flex-direction: column; gap: 1.25rem; max-height: 95vh; overflow-y: auto;">
+        <div style="background: rgba(10, 102, 194, 0.1); width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+          <Globe :size="24" style="color: #60a5fa;" />
         </div>
-        <div>
-          <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: #60a5fa;">LinkedIn Desconfigurado</h3>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; text-align: justify; margin: 0;">
-            As credenciais de <strong>OAuth do LinkedIn</strong> (Client ID / Client Secret) não estão configuradas nas Configurações do VagaSync.
-            Para testar a plataforma, você pode simular o login do LinkedIn ou voltar e acessar com e-mail/senha.
+        <div style="text-align: center;">
+          <h3 style="font-size: 1.2rem; margin-bottom: 0.4rem; color: #60a5fa;">LinkedIn Desconfigurado</h3>
+          <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; text-align: justify; margin: 0;">
+            As credenciais de <strong>OAuth do LinkedIn</strong> não estão configuradas nas Configurações. Escolha o modo de testes simulado ou configure abaixo para usar o <strong>Login Real</strong>.
           </p>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+        <!-- Opção 1: Simulação rápida -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; text-align: center;">
+          <h4 style="font-size: 0.85rem; color: var(--color-secondary); margin: 0 0 0.5rem 0;">Opção de Testes Rápida (Simulação)</h4>
           <button 
             type="button" 
             class="btn btn-primary" 
-            style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.65rem;" 
+            style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.55rem; width: 100%; font-size: 0.8rem;" 
             @click="simulateLinkedinLogin(); showLinkedinSimulationModal = false;"
           >
-            <i class="fa-solid fa-wand-magic-sparkles" style="margin-right: 4px;"></i> Simular Login LinkedIn
-          </button>
-          <button 
-            type="button" 
-            class="btn btn-secondary" 
-            style="padding: 0.65rem;"
-            @click="showLinkedinSimulationModal = false;"
-          >
-            Voltar
+            <i class="fa-solid fa-wand-magic-sparkles" style="margin-right: 4px;"></i> Simular Login (Bypass Completo)
           </button>
         </div>
+
+        <!-- Opção 2: Credenciais para fluxo real -->
+        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: left; display: flex; flex-direction: column; gap: 0.85rem;">
+          <h4 style="font-size: 0.85rem; color: #fff; margin: 0; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-key" style="color: #60a5fa;"></i> Configurar Login Real (OAuth)
+          </h4>
+          
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">LinkedIn Client ID</label>
+            <input 
+              type="text" 
+              class="form-input" 
+              style="font-size: 0.8rem; padding: 0.45rem;" 
+              v-model="config.linkedin_client_id" 
+              placeholder="Digite seu Client ID do LinkedIn" 
+            />
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">LinkedIn Client Secret</label>
+            <input 
+              type="password" 
+              class="form-input" 
+              style="font-size: 0.8rem; padding: 0.45rem;" 
+              v-model="config.linkedin_client_secret" 
+              placeholder="Digite seu Client Secret do LinkedIn" 
+            />
+          </div>
+
+          <button 
+            type="button" 
+            class="btn btn-primary" 
+            style="background: linear-gradient(135deg, #10b981, #34d399); border: none; color: #060913; font-weight: 700; padding: 0.6rem; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 0.25rem;" 
+            @click="saveCredentialsAndLoginReal"
+          >
+            <i class="fa-solid fa-cloud-arrow-up"></i> Salvar & Iniciar Login Real
+          </button>
+        </div>
+
+        <button 
+          type="button" 
+          class="btn btn-secondary" 
+          style="padding: 0.55rem; font-size: 0.8rem;"
+          @click="showLinkedinSimulationModal = false;"
+        >
+          Voltar
+        </button>
       </div>
     </div>
 
