@@ -1,0 +1,56 @@
+Created At: 2026-06-21T15:36:17Z
+Completed At: 2026-06-21T15:36:19Z
+
+				The command completed successfully.
+				Output:
+				13:  linkedin_cookie: '',
+92:  if (config.value.linkedin_cookie && config.value.linkedin_cookie !== '••••••••••••••••') {
+107:  if (score >= 70) return 'Muito bom! Complete seu currículo ou adicione o cookie do LinkedIn para chegar a 90+ pts.';
+310:    showToast('Plano Recrutador Pro Ativado!', 'Parabéns! Suas ferramentas de recrutamento ilimitadas e Meet foram liberados.', 'success');
+323:    showToast('Plano Cancelado', 'Você retornou ao Plano Gratuito de Recrutador.', 'info');
+371:    link: 'https://linkedin.com/jobs/view/' + Date.now(),
+376:    recruiter_name: authForm.value.name || 'Recrutador Vaga Sync',
+395:    secretLoginOpen.value = true;
+400:// Secret admin login state
+401:const secretLoginOpen = ref(false);
+481:const handleAdminLogin = async (e) => {
+484:    const res = await fetch(`${API_BASE}/admin/login`, {
+498:      showToast('Erro de Login', err.detail || 'E-mail ou senha do proprietário incorretos.', 'error');
+526:      secretLoginOpen.value = false;
+676:  { sender: 'interviewer', name: 'Recrutador', content: 'Olá! Seja bem-vindo à nossa sala de entrevista por vídeo do Vaga Sync. O áudio e vídeo estão funcionando?', time: new Date().toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'}) }
+753:      name: 'Recrutador',
+763:const authMode = ref('login');
+764:const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
+766:const handleLinkedInLogin = () => {
+773:  showToast('Login LinkedIn', `Sessão iniciada como ${role === 'recruiter' ? 'Recrutador' : 'Candidato'} via LinkedIn com sucesso!`, 'success');
+776:const handleLogin = (e) => {
+788:  showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${authForm.value.role === 'recruiter' ? 'Recrutador' : 'Candidato'}.`, 'success');
+803:  showToast('Conta Criada!', `Seu perfil de ${authForm.value.role === 'recruiter' ? 'Recrutador' : 'Candidato'} foi configurado.`, 'success');
+843:        showToast('📞 Contato de Recrutador!', logData.message, 'success');
+847:      } else if (logData.message.includes('Gemini LinkedIn') && logData.message.includes('vagas')) {
+848:        showToast('💼 Gemini LinkedIn', logData.message, 'info');
+964:      liveStatus.value = { message: '🤖 Agente iniciado — Gemini buscando vagas na web e LinkedIn...', level: 'info', timestamp: new Date().toISOString() };
+1234:    <!-- Secret Super Admin Login Modal -->
+1235:    <div v-if="secretLoginOpen" class="modal-overlay" style="
+1247:        <form v-if="!secret2faOpen" @submit="handleAdminLogin" style="display: flex; flex-direction: column; gap: 1.25rem;">
+1259:          <button type="button" class="btn btn-secondary" @click="secretLoginOpen = false" style="width: 100%;">
+1279:          <button type="button" class="btn btn-secondary" @click="secret2faOpen = false; secretLoginOpen = false;" style="width: 100%;">
+1286:    <!-- Login/Signup Screen -->
+1310:                <h4>Vincule seu LinkedIn</h4>
+1338:        <!-- Right panel: Login/Signup Card -->
+1341:            <form v-if="authMode === 'login'" @submit="handleLogin">
+1344:                Faça login para gerenciar suas candidaturas automatizadas.
+1347:              <!-- Escolha de Perfil (Candidato vs Recrutador) -->
+1363:                  <i class="fa-solid fa-user-tie"></i> Sou Recrutador
+1369:                class="btn social-btn-linkedin"
+1370:                @click="handleLinkedInLogin"
+1372:                <i class="fa-solid fa-globe" style="font-size: 18px;"></i> Entrar com LinkedIn
+1409:                  Criar uma conta e vincular LinkedIn
+1420:              <!-- Escolha de Perfil (Candidato vs Recrutador) -->
+1436:                  <i class="fa-solid fa-user-tie"></i> Sou Recrutador
+1476:                  id="linkedin_chk" 
+1477:                  v-model="authForm.linkLinkedIn"
+1480:                <label htmlFor="linkedin_chk" style="margin: 0; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+1481:                  Vincular conta do LinkedIn para puxar melhor as vagas (Recomendado)
+1493:                  @click="authMode = 'login'"
+

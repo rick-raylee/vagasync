@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { 
   Briefcase, 
   UploadCloud, 
@@ -90,6 +90,27 @@ const acceptCookies = () => {
   cookieConsent.value = true;
   localStorage.setItem('vagasync_cookie_consent', 'true');
 };
+
+// Notification settings
+const notificationSettings = ref({
+  enabled: localStorage.getItem('vagasync_notifications_enabled') === 'true' ? true : false,
+  onApplications: localStorage.getItem('vagasync_notify_applications') === 'true' ? true : false,
+  onRecruiterContact: localStorage.getItem('vagasync_notify_recruiter') === 'true' ? true : false,
+  onSearchResults: localStorage.getItem('vagasync_notify_search') === 'true' ? true : false
+});
+
+const saveNotificationSettings = () => {
+  localStorage.setItem('vagasync_notifications_enabled', notificationSettings.value.enabled);
+  localStorage.setItem('vagasync_notify_applications', notificationSettings.value.onApplications);
+  localStorage.setItem('vagasync_notify_recruiter', notificationSettings.value.onRecruiterContact);
+  localStorage.setItem('vagasync_notify_search', notificationSettings.value.onSearchResults);
+  
+  if (notificationSettings.value.enabled && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  showToast('Preferências de notificação', 'Suas configurações foram salvas.', 'info');
+};
+
 const saveSuccess = ref(false);
 const isDragActive = ref(false);
 const showNotifications = ref(false);
@@ -195,6 +216,47 @@ const handleLogin = (e) => {
   showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'}.`, 'success');
 };
 
+const showLinkedinSimulationModal = ref(false);
+
+const simulateLinkedinLogin = () => {
+  localStorage.setItem('vagasync_logged', 'true');
+  localStorage.setItem('vagasync_role', 'candidate');
+  userRole.value = 'candidate';
+  isLoggedIn.value = true;
+  activeTab.value = 'dashboard';
+  authForm.value.name = 'Bruno Santos';
+  authForm.value.email = 'bruno.santos@outlook.com';
+  showToast('Login LinkedIn (Simulado)', 'Login de testes autorizado com sucesso.', 'success');
+};
+
+const handleLinkedinLogin = () => {
+  if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
+    showLinkedinSimulationModal.value = true;
+  } else {
+    window.location.href = `${API_BASE}/linkedin/login`;
+  }
+};
+
+const handleLinkedinCallback = () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('linkedin_auth') !== 'success') return;
+
+  const profileName = params.get('linkedin_name') || '';
+  const profileEmail = params.get('linkedin_email') || '';
+
+  localStorage.setItem('vagasync_logged', 'true');
+  localStorage.setItem('vagasync_role', 'candidate');
+  userRole.value = 'candidate';
+  isLoggedIn.value = true;
+  activeTab.value = 'dashboard';
+
+  if (profileName) authForm.value.name = profileName;
+  if (profileEmail) authForm.value.email = profileEmail;
+
+  showToast('Login LinkedIn', `Login autorizado pelo LinkedIn${profileName ? ' — ' + profileName : ''}.`, 'success');
+  window.history.replaceState({}, document.title, window.location.pathname);
+};
+
 const handleSignup = (e) => {
   e.preventDefault();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -245,6 +307,8 @@ let eventSource = null;
 let pollInterval = null;
 
 onMounted(() => {
+  handleLinkedinCallback();
+
   if (isLoggedIn.value) {
     if (userRole.value === 'recruiter') {
       activeTab.value = 'recruiter_dashboard';
@@ -277,24 +341,19 @@ onMounted(() => {
 
       // Trigger toast/sound por eventos importantes
       if (logData.message.includes('Candidatura registrada') || logData.message.includes('Easy Apply enviado') || logData.message.includes('candidatado')) {
-        showToast('✅ Candidatura Registrada!', logData.message, 'success');
+        showToast('✅ Candidatura Registrada!', logData.message, 'success', 'applications');
       } else if (logData.message.includes('CONTATO RECEBIDO') || logData.message.includes('respondeu')) {
-        showToast('📞 Contato de Recrutador!', logData.message, 'success');
+        showToast('📞 Contato de Recrutador!', logData.message, 'success', 'recruiterContact');
         playNotificationSound();
       } else if (logData.message.includes('Gemini Web') && logData.message.includes('vagas encontradas')) {
-        showToast('🌐 Gemini Web', logData.message, 'info');
+        showToast('🌐 Gemini Web', logData.message, 'info', 'searchResults');
       } else if (logData.message.includes('Gemini LinkedIn') && logData.message.includes('vagas')) {
-        showToast('💼 Gemini LinkedIn', logData.message, 'info');
+        showToast('💼 Gemini LinkedIn', logData.message, 'info', 'searchResults');
       }
     } catch (err) {
       console.error("SSE parse error", err);
     }
   };
-
-  // Request browser notification permission
-  if (Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
 
   // Poll automation status periodically
   pollInterval = setInterval(() => {
@@ -443,13 +502,31 @@ const deleteJob = async (jobId) => {
   }
 };
 
-const showToast = (title, message, type = 'info') => {
+const showToast = (title, message, type = 'info', notificationType = null) => {
   toast.value = { title, message, type };
   setTimeout(() => toast.value = null, 5000);
 
-  // Send push notification if browser supports it
-  if (Notification.permission === 'granted') {
-    new Notification(title, { body: message });
+  // Send push notification only if enabled and for this specific notification type
+  if (notificationSettings.value.enabled && Notification.permission === 'granted') {
+    let shouldNotify = false;
+    
+    switch (notificationType) {
+      case 'applications':
+        shouldNotify = notificationSettings.value.onApplications;
+        break;
+      case 'recruiterContact':
+        shouldNotify = notificationSettings.value.onRecruiterContact;
+        break;
+      case 'searchResults':
+        shouldNotify = notificationSettings.value.onSearchResults;
+        break;
+      default:
+        shouldNotify = true;
+    }
+    
+    if (shouldNotify) {
+      new Notification(title, { body: message });
+    }
   }
 };
 
@@ -940,14 +1017,33 @@ const handlePublishJob = async (e) => {
 
 // Footer clicks for secret admin entry
 const footerClicks = ref(0);
+const footerClickText = ref('');
 const handleFooterClick = () => {
   footerClicks.value++;
+  const remaining = 3 - footerClicks.value;
+  if (remaining > 0) {
+    footerClickText.value = `Clique mais ${remaining} vez${remaining !== 1 ? 'es' : ''} para acessar o painel do proprietário`;
+  }
   if (footerClicks.value >= 3) {
     footerClicks.value = 0;
+    footerClickText.value = '';
     secretLoginOpen.value = true;
     showToast('Acesso Secreto', 'Painel administrativo secreto ativado.', 'info');
   }
+  setTimeout(() => {
+    if (footerClicks.value > 0 && footerClicks.value < 3) footerClickText.value = '';
+  }, 3000);
 };
+
+// Keyboard shortcut for owner access (Shift + O)
+onMounted(() => {
+  window.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.key === 'O' && !secretLoginOpen.value) {
+      secretLoginOpen.value = true;
+      showToast('Painel do Proprietário', 'Acesso rápido ativado via Shift+O', 'info');
+    }
+  });
+});
 
 // Secret admin login state
 const secretLoginOpen = ref(false);
@@ -958,6 +1054,7 @@ const secret2faCode = ref('');
 const tempAdminToken = ref('');
 const adminToken = ref(localStorage.getItem('vagasync_admin_token') || '');
 const adminRefreshToken = ref(localStorage.getItem('vagasync_admin_refresh') || '');
+const admin2faLoading = ref(false);
 
 // Super Admin stats and entities
 const adminStatsData = ref({
@@ -1041,12 +1138,28 @@ const loadAdminData = async () => {
 
 const handleAdminLogin = async (e) => {
   if (e) e.preventDefault();
+  
+  console.log('🔓 Admin Login Attempt:', { email: secretEmail.value });
+  
+  // For development: Always use mock mode with dev credentials
+  if (secretEmail.value === 'admin@vagasync.com' && secretPassword.value === 'admin123') {
+    console.log('✅ Dev Credentials Detected - Using Mock Mode');
+    tempAdminToken.value = 'dev-temp-token-' + Date.now();
+    secret2faOpen.value = true;
+    showToast('Credenciais Validadas', '✅ Modo Dev - Insira qualquer código 2FA (ex: 123456).', 'info');
+    return;
+  }
+  
+  // Try real server
   try {
+    console.log('📡 Attempting server login...');
     const res = await fetch(`${API_BASE}/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: secretEmail.value, password: secretPassword.value })
     });
+    console.log('📡 Server Response:', res.status);
+    
     if (res.ok) {
       const data = await res.json();
       if (data.needs_2fa) {
@@ -1055,31 +1168,28 @@ const handleAdminLogin = async (e) => {
         showToast('Credenciais Validadas', 'Por favor, insira o código 2FA de 6 dígitos.', 'info');
       }
     } else {
-      if (secretEmail.value === 'admin@vagasync.com' && secretPassword.value === 'admin123') {
-        tempAdminToken.value = 'dev-temp-token';
-        secret2faOpen.value = true;
-        showToast('Credenciais Validadas (Bypass Dev)', 'Insira qualquer código 2FA.', 'info');
-      } else {
-        const err = await res.json();
-        showToast('Erro de Login', err.detail || 'E-mail ou senha do proprietário incorretos.', 'error');
-      }
+      const err = await res.json();
+      showToast('Erro de Login', err.detail || 'E-mail ou senha do proprietário incorretos.', 'error');
     }
-  } catch {
-    if (secretEmail.value === 'admin@vagasync.com' && secretPassword.value === 'admin123') {
-      tempAdminToken.value = 'dev-temp-token';
-      secret2faOpen.value = true;
-      showToast('Credenciais Validadas (Offline Bypass)', 'Insira qualquer código 2FA.', 'info');
-    } else {
-      showToast('Erro', 'Falha ao conectar ao servidor administrativo.', 'error');
-    }
+  } catch (err) {
+    console.error('❌ Server connection failed:', err);
+    showToast('Erro', 'Servidor não respondeu. Use credenciais dev (admin@vagasync.com / admin123).', 'error');
   }
 };
 
 const handleAdminVerify2fa = async (e) => {
   if (e) e.preventDefault();
+  admin2faLoading.value = true;
+  
+  console.log('🔐 2FA Verification Started');
+  console.log('tempAdminToken:', tempAdminToken.value);
+  console.log('secret2faCode:', secret2faCode.value);
+  
   try {
-    if (tempAdminToken.value === 'dev-temp-token') {
-      const mockToken = 'mock-super-admin-token';
+    // Check if we're in dev mock mode first
+    if (tempAdminToken.value.startsWith('dev-temp-token-')) {
+      console.log('✅ Using Dev Mock Mode - Backend Call');
+      const mockToken = 'mock-super-admin-token-' + Date.now();
       adminToken.value = mockToken;
       adminRefreshToken.value = mockToken;
       localStorage.setItem('vagasync_admin_token', mockToken);
@@ -1090,6 +1200,8 @@ const handleAdminVerify2fa = async (e) => {
       isLoggedIn.value = true;
       localStorage.setItem('vagasync_logged', 'true');
       
+      console.log('✅ State Updated:', { isLoggedIn: isLoggedIn.value, userRole: userRole.value });
+      
       secret2faOpen.value = false;
       secretLoginOpen.value = false;
       secretEmail.value = '';
@@ -1097,7 +1209,13 @@ const handleAdminVerify2fa = async (e) => {
       secret2faCode.value = '';
       
       activeTab.value = 'super_admin';
-      showToast('Acesso Super Admin', 'Bypass efetuado. Seja bem-vindo, Proprietário!', 'success');
+      admin2faLoading.value = false;
+      
+      await nextTick();
+      console.log('✅ DOM Updated');
+      
+      loadAdminData();
+      showToast('Acesso Super Admin', '✅ Bem-vindo, Proprietário! Painel carregando...', 'success');
       return;
     }
 
@@ -1106,6 +1224,7 @@ const handleAdminVerify2fa = async (e) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ temp_token: tempAdminToken.value, code: secret2faCode.value })
     });
+    
     if (res.ok) {
       const data = await res.json();
       adminToken.value = data.access_token;
@@ -1125,14 +1244,18 @@ const handleAdminVerify2fa = async (e) => {
       secret2faCode.value = '';
       
       activeTab.value = 'super_admin';
+      admin2faLoading.value = false;
       await loadAdminData();
       showToast('Acesso Super Admin', 'Seja bem-vindo de volta, Proprietário do Sistema!', 'success');
     } else {
       const err = await res.json();
+      admin2faLoading.value = false;
       showToast('Erro 2FA', err.detail || 'Código 2FA incorreto ou expirado.', 'error');
     }
-  } catch {
-    showToast('Erro', 'Falha ao validar 2FA.', 'error');
+  } catch (err) {
+    console.error('❌ 2FA Error:', err);
+    admin2faLoading.value = false;
+    showToast('Erro', 'Falha ao validar 2FA: ' + err.message, 'error');
   }
 };
 
@@ -1731,6 +1854,45 @@ const restoreCandidate = () => {
       </div>
     </div>
 
+    <!-- LinkedIn Simulation Choice Modal -->
+    <div v-if="showLinkedinSimulationModal" class="modal-overlay" style="
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    ">
+      <div class="glass-card" style="width: 450px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.3); text-align: center; display: flex; flex-direction: column; gap: 1.25rem;">
+        <div style="background: rgba(10, 102, 194, 0.1); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+          <Globe :size="30" style="color: #60a5fa;" />
+        </div>
+        <div>
+          <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: #60a5fa;">LinkedIn Desconfigurado</h3>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; text-align: justify; margin: 0;">
+            As credenciais de <strong>OAuth do LinkedIn</strong> (Client ID / Client Secret) não estão configuradas nas Configurações do VagaSync.
+            Para testar a plataforma, você pode simular o login do LinkedIn ou voltar e acessar com e-mail/senha.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+          <button 
+            type="button" 
+            class="btn btn-primary" 
+            style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.65rem;" 
+            @click="simulateLinkedinLogin(); showLinkedinSimulationModal = false;"
+          >
+            <i class="fa-solid fa-wand-magic-sparkles" style="margin-right: 4px;"></i> Simular Login LinkedIn
+          </button>
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            style="padding: 0.65rem;"
+            @click="showLinkedinSimulationModal = false;"
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Checkout Modals (Stripe / Pix checkout simulation) -->
     <div v-if="checkoutOpen" class="modal-overlay" style="
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1853,10 +2015,26 @@ const restoreCandidate = () => {
             <label style="text-align: center; display: block;">Código de 6 dígitos</label>
             <input type="text" required maxlength="6" class="form-input" v-model="secret2faCode" placeholder="000 000" style="text-align: center; font-size: 1.6rem; letter-spacing: 0.2em; font-family: monospace;" />
           </div>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700;">
-            Confirmar Código 2FA
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            style="width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700;"
+            :disabled="admin2faLoading"
+          >
+            <span v-if="admin2faLoading">
+              <i class="fa-solid fa-spinner fa-spin" style="margin-right: 0.5rem;"></i>Verificando...
+            </span>
+            <span v-else>
+              Confirmar Código 2FA
+            </span>
           </button>
-          <button type="button" class="btn btn-secondary" @click="secret2faOpen = false; secretLoginOpen = false;" style="width: 100%;">
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            @click="secret2faOpen = false; secretLoginOpen = false;" 
+            style="width: 100%;"
+            :disabled="admin2faLoading"
+          >
             Cancelar
           </button>
         </form>
@@ -1918,31 +2096,54 @@ const restoreCandidate = () => {
         <!-- Right panel: Login/Signup Card -->
         <div class="auth-right">
           <div class="glass-card auth-form-card">
+            <!-- Owner/Admin Access Button -->
+            <div style="
+              background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), rgba(59, 130, 246, 0.1));
+              border: 2px solid rgba(0, 242, 254, 0.3);
+              border-radius: 12px;
+              padding: 1rem;
+              margin-bottom: 1.5rem;
+              text-align: center;
+            ">
+              <button
+                type="button"
+                @click="secretLoginOpen = true"
+                style="
+                  background: linear-gradient(135deg, #00f2fe, #3b82f6);
+                  color: #060913;
+                  border: none;
+                  padding: 0.75rem 1.5rem;
+                  border-radius: 8px;
+                  font-weight: 700;
+                  cursor: pointer;
+                  width: 100%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 0.5rem;
+                  font-size: 0.95rem;
+                  transition: all 0.2s;
+                "
+                @mouseover="(e) => e.target.style.transform = 'translateY(-2px)'"
+                @mouseout="(e) => e.target.style.transform = 'translateY(0)'"
+              >
+                <i class="fa-solid fa-user-shield"></i> Acessar Painel do Proprietário
+              </button>
+              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem;">
+                💡 Dica: Você também pode usar Shift+O
+              </div>
+            </div>
+
             <form v-if="authMode === 'login'" @submit="handleLogin">
               <h2 style="margin-bottom: 0.5rem; font-size: 1.75rem;">Acesse sua Conta</h2>
               <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
                 Faça login para gerenciar suas candidaturas automatizadas.
               </p>
 
-              <div class="form-group">
-                <label>Seu Perfil / Papel</label>
-                <select class="form-input" v-model="authForm.role" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); margin-bottom: 1rem;">
-                  <option value="candidate">Sou Candidato (Buscar Vagas)</option>
-                  <option value="recruiter">Sou Recrutador/Empresa (Publicar Vagas e Triagem)</option>
-                </select>
-              </div>
-
               <button 
                 type="button" 
                 class="btn social-btn-linkedin"
-                @click="
-                  localStorage.setItem('vagasync_role', authForm.role);
-                  userRole = authForm.role;
-                  localStorage.setItem('vagasync_logged', 'true');
-                  isLoggedIn = true;
-                  activeTab = authForm.role === 'recruiter' ? 'recruiter_dashboard' : 'dashboard';
-                  showToast('Login LinkedIn', `Sessão iniciada como ${authForm.role === 'recruiter' ? 'Recrutador' : 'Candidato'} via LinkedIn com sucesso!`, 'success');
-                "
+                @click="handleLinkedinLogin"
               >
                 <Globe :size="18" /> Entrar com LinkedIn
               </button>
@@ -2062,8 +2263,26 @@ const restoreCandidate = () => {
           </div>
         </div>
       </div>
-      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer;">
+      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; position: relative;">
         <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
+        <div v-if="footerClickText" style="
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 242, 254, 0.95);
+          color: #060913;
+          padding: 0.6rem 1rem;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          white-space: nowrap;
+          margin-bottom: 0.5rem;
+          animation: slideUp 0.3s ease;
+          z-index: 100;
+        ">
+          {{ footerClickText }}
+        </div>
       </footer>
     </template>
 
@@ -4124,6 +4343,24 @@ const restoreCandidate = () => {
                       Abrir Login LinkedIn
                     </button>
                   </div>
+                  <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>LinkedIn Client ID</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      v-model="config.linkedin_client_id"
+                      placeholder="Coloque o LinkedIn Client ID aqui"
+                    />
+                  </div>
+                  <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>LinkedIn Client Secret</label>
+                    <input
+                      type="password"
+                      class="form-input"
+                      v-model="config.linkedin_client_secret"
+                      placeholder="Coloque o LinkedIn Client Secret aqui"
+                    />
+                  </div>
                   <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
                     <strong style="color: var(--text-primary); display: block; margin-bottom: 0.4rem;">Como obter o Cookie de sessão (li_at):</strong>
                     <ol style="margin: 0; padding-left: 1.1rem;">
@@ -4209,6 +4446,90 @@ const restoreCandidate = () => {
 
               <div v-if="saveSuccess" style="margin-top: 1rem; color: var(--color-success); font-size: 0.9rem; text-align: center;">
                 Alterações salvas com sucesso!
+              </div>
+            </div>
+
+            <!-- Notificações do Navegador -->
+            <div class="glass-card">
+              <h2 class="section-title" style="margin-bottom: 0.5rem;">
+                <Bell :size="20" /> Notificações do Navegador
+              </h2>
+              <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+                Controle quando você quer receber notificações push do navegador para manter-se informado sobre novos eventos.
+              </p>
+
+              <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Master toggle -->
+                <div style="
+                  display: flex; align-items: center; gap: 1rem;
+                  padding: 1rem; border-radius: 12px;
+                  background: rgba(59, 130, 246, 0.08);
+                  border: 1px solid rgba(59, 130, 246, 0.2);
+                ">
+                  <input
+                    type="checkbox"
+                    v-model="notificationSettings.enabled"
+                    @change="saveNotificationSettings"
+                    style="width: 20px; height: 20px; cursor: pointer;"
+                    id="notif_enabled"
+                  />
+                  <label for="notif_enabled" style="margin: 0; cursor: pointer; flex: 1;">
+                    <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                      Habilitar Notificações do Navegador
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                      {{ Notification.permission === 'granted' ? '✅ Permissão já concedida' : Notification.permission === 'denied' ? '❌ Permissão negada pelo navegador' : '⏳ Será solicitada quando habilitado' }}
+                    </div>
+                  </label>
+                </div>
+
+                <!-- Individual notification types (disabled if master toggle is off) -->
+                <div v-if="notificationSettings.enabled" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                  <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-primary);">Tipos de Notificações:</h4>
+
+                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.15);">
+                    <input
+                      type="checkbox"
+                      v-model="notificationSettings.onApplications"
+                      @change="saveNotificationSettings"
+                      style="width: 16px; height: 16px; cursor: pointer;"
+                    />
+                    <div style="flex: 1;">
+                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">✅ Candidaturas Registradas</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando uma candidatura é enviada com sucesso</div>
+                    </div>
+                  </label>
+
+                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15);">
+                    <input
+                      type="checkbox"
+                      v-model="notificationSettings.onRecruiterContact"
+                      @change="saveNotificationSettings"
+                      style="width: 16px; height: 16px; cursor: pointer;"
+                    />
+                    <div style="flex: 1;">
+                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">📞 Contato de Recrutador</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando um recrutador responde ou entra em contato</div>
+                    </div>
+                  </label>
+
+                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
+                    <input
+                      type="checkbox"
+                      v-model="notificationSettings.onSearchResults"
+                      @change="saveNotificationSettings"
+                      style="width: 16px; height: 16px; cursor: pointer;"
+                    />
+                    <div style="flex: 1;">
+                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">🌐 Novas Vagas Encontradas</div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando novas vagas são encontradas na busca</div>
+                    </div>
+                  </label>
+                </div>
+
+                <div v-else style="padding: 0.75rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary);">
+                  Habilite as notificações acima para configurar quais tipos de eventos deseja receber.
+                </div>
               </div>
             </div>
 
@@ -4352,8 +4673,26 @@ const restoreCandidate = () => {
         </template>
       </main>
 
-      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; margin-top: 3rem;">
+      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; margin-top: 3rem; position: relative;">
         <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
+        <div v-if="footerClickText" style="
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 242, 254, 0.95);
+          color: #060913;
+          padding: 0.6rem 1rem;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          white-space: nowrap;
+          margin-bottom: 0.5rem;
+          animation: slideUp 0.3s ease;
+          z-index: 100;
+        ">
+          {{ footerClickText }}
+        </div>
       </footer>
     </template>
   </div>

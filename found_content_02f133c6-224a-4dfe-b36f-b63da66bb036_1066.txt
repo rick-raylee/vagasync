@@ -1,0 +1,51 @@
+Created At: 2026-06-20T20:10:50Z
+Completed At: 2026-06-20T20:13:42Z
+
+				The command completed successfully.
+				Output:
+				
+frontend\src\App.vue:13:  linkedin_cookie: '',
+frontend\src\App.vue:92:  if (config.value.linkedin_cookie && config.value.linkedin_cookie !== '') {
+frontend\src\App.vue:107:  if (score >= 70) return 'Muito bom! Complete seu curr�culo ou adicione o cookie do LinkedIn 
+para chegar a 90+ pts.';
+frontend\src\App.vue:310:    showToast('Plano Recrutador Pro Ativado!', 'Parab�ns! Suas ferramentas de recrutamento 
+ilimitadas e Meet foram liberados.', 'success');
+frontend\src\App.vue:323:    showToast('Plano Cancelado', 'Voc� retornou ao Plano Gratuito de Recrutador.', 'info');
+frontend\src\App.vue:371:    link: 'https://linkedin.com/jobs/view/' + Date.now(),
+frontend\src\App.vue:376:    recruiter_name: authForm.value.name || 'Recrutador Vaga Sync',
+frontend\src\App.vue:395:    secretLoginOpen.value = true;
+frontend\src\App.vue:400:// Secret admin login state
+frontend\src\App.vue:401:const secretLoginOpen = ref(false);
+frontend\src\App.vue:481:const handleAdminLogin = async (e) => {
+frontend\src\App.vue:484:    const res = await fetch(`${API_BASE}/admin/login`, {
+frontend\src\App.vue:498:      showToast('Erro de Login', err.detail || 'E-mail ou senha do propriet�rio incorretos.', 
+'error');
+frontend\src\App.vue:526:      secretLoginOpen.value = false;
+frontend\src\App.vue:676:  { sender: 'interviewer', name: 'Recrutador', content: 'Ol�! Seja bem-vindo � nossa sala de 
+entrevista por v�deo do Vaga Sync. O �udio e v�deo est�o funcionando?', time: new Date().toLocaleTimeString(undefined, 
+{hour: '2-digit', minute:'2-digit'}) }
+frontend\src\App.vue:753:      name: 'Recrutador',
+frontend\src\App.vue:763:const authMode = ref('login');
+frontend\src\App.vue:764:const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 
+'candidate' });
+frontend\src\App.vue:766:const handleLinkedInLogin = () => {
+frontend\src\App.vue:773:  showToast('Login LinkedIn', `Sess�o iniciada como ${role === 'recruiter' ? 'Recrutador' : 
+'Candidato'} via LinkedIn com sucesso!`, 'success');
+frontend\src\App.vue:776:const handleLogin = (e) => {
+frontend\src\App.vue:788:  showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${authForm.value.role === 
+'recruiter' ? 'Recrutador' : 'Candidato'}.`, 'success');
+frontend\src\App.vue:803:  showToast('Conta Criada!', `Seu perfil de ${authForm.value.role === 'recruiter' ? 
+'Recrutador' : 'Candidato'} foi configurado.`, 'success');
+frontend\src\App.vue:843:        showToast('?? Contato de Recrutador!', logData.message, 'success');
+frontend\src\App.vue:847:      } else if (logData.message.includes('Gemini LinkedIn') && 
+logData.message.includes('vagas')) {
+frontend\src\App.vue:848:        showToast('?? Gemini LinkedIn', logData.message, 'info');
+frontend\src\App.vue:964:      liveStatus.value = { message: '?? Agente iniciado - Gemini buscando vagas na web e 
+LinkedIn...', level: 'info', timestamp: new Date().toISOString() };
+frontend\src\App.vue:1234:    <!-- Secret Super Admin Login Modal -->
+frontend\src\App.vue:1235:    <div v-if="secretLoginOpen" class="modal-overlay" style="
+frontend\src\App.vue:1247:        <form v-if="!secret2faOpen" @submit="handleAdminLogin" style="display: flex; 
+flex-direction: column; gap: 1.25rem;">
+
+
+
