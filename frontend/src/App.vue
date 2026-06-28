@@ -1394,6 +1394,19 @@ const pixQRCodeUrl = computed(() => {
   return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixPayload.value)}`;
 });
 
+const maskedPixKey = computed(() => {
+  const rawKey = config.value.pix_key || '109.472.439-41';
+  if (rawKey.includes('@')) {
+    return rawKey.replace(/^(..)(.*)(@.*)$/, '$1***$3');
+  } else {
+    const digits = rawKey.replace(/\D/g, '');
+    if (digits.length === 11) {
+      return `***.***.${digits.slice(6, 9)}-**`;
+    }
+  }
+  return 'Chave Pix (Cadastrada)';
+});
+
 const copyPixCopiaECola = () => {
   navigator.clipboard.writeText(pixPayload.value);
   pixCopied.value = true;
@@ -6460,48 +6473,19 @@ const restoreCandidate = () => {
                       </div>
                     </div>
                     
-                    <!-- Pix Card (Netflix Style) -->
-                    <div 
-                      v-if="transactionHistory.length > 0 && (transactionHistory[0].payment_method === 'pix' || transactionHistory[0].payment_method === 'pix_fallback')"
-                      style="background: linear-gradient(135deg, #0f172a 0%, #020617 100%); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,242,254,0.1); height: 160px;"
-                    >
+                    <!-- Cartão Netflix Style (Sempre visível para permitir alteração/adesão por cartão) -->
+                    <div style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
                       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <span style="font-weight: 800; color: #00f2fe; font-size: 0.95rem; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px;">
-                          <i class="fa-solid fa-pix"></i> PIX
-                        </span>
-                        <span style="font-size: 0.65rem; color: #34d399; font-weight: 700; background: rgba(52,211,153,0.1); padding: 2px 6px; border-radius: 4px;">CONECTADO</span>
-                      </div>
-                      
-                      <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin: 0.5rem 0;">
-                        Chave Pix: <strong style="color: #fff;">{{ config.pix_key || '109.472.439-41' }}</strong>
-                      </div>
-                      
-                      <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="font-size: 0.68rem; color: var(--text-muted);">Ricardo Marchi</div>
-                        <button 
-                          type="button" 
-                          class="btn btn-secondary" 
-                          style="font-size: 0.72rem; padding: 0.35rem 0.7rem; border-color: rgba(0, 242, 254, 0.3); background: rgba(0, 242, 254, 0.05); color: #00f2fe;"
-                          @click="copyToClipboard(config.pix_key || '109.472.439-41', 'Chave Copiada', 'Chave Pix copiada com sucesso!')"
-                        >
-                          Copiar Chave
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Cartão Netflix Style -->
-                    <div v-else style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
-                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <span style="font-weight: 700; color: #3b82f6; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;">{{ cardBrand }}</span>
+                        <span style="font-weight: 700; color: #3b82f6; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;">{{ cardBrand || 'CARD' }}</span>
                         <i class="fa-solid fa-signal" style="color: rgba(255,255,255,0.2); font-size: 0.9rem;"></i>
                       </div>
                       <div style="font-family: monospace; font-size: 1.1rem; color: #fff; letter-spacing: 0.15em; margin: 1rem 0;">
-                        •••• •••• •••• {{ cardLast4 }}
+                        •••• •••• •••• {{ cardLast4 || '8899' }}
                       </div>
                       <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                           <div style="font-size: 0.6rem; text-transform: uppercase; color: var(--text-muted);">Validade</div>
-                          <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">{{ cardExpiry }}</div>
+                          <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">{{ cardExpiry || '12/28' }}</div>
                         </div>
                         <button 
                           type="button" 
@@ -6546,7 +6530,7 @@ const restoreCandidate = () => {
                         </button>
                         
                         <div style="font-size: 0.74rem; color: var(--text-muted);">
-                          Chave CPF: <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 2px 6px; border-radius: 4px;">{{ config.pix_key || '109.472.439-41' }}</code>
+                          Chave Pix: <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 2px 6px; border-radius: 4px;">{{ maskedPixKey }}</code>
                         </div>
                       </div>
                     </div>
