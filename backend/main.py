@@ -1839,6 +1839,26 @@ def charge_card_payment(payload: CardPaymentRequest, db: Session = Depends(get_d
     access_token = get_config_value(db, "mercadopago_access_token", MP_ACCESS_TOKEN)
     clean_card = payload.card_number.replace(" ", "")
     
+    # Detecção automática de todas as bandeiras brasileiras e internacionais
+    def detect_brand(num: str) -> str:
+        if num.startswith("4"):
+            return "visa"
+        if num.startswith(("51", "52", "53", "54", "55")) or any(num.startswith(str(x)) for x in range(2221, 2721)):
+            return "master"
+        if num.startswith(("34", "37")):
+            return "amex"
+        if num.startswith(("606282", "3841")):
+            return "hipercard"
+        if num.startswith(("301", "305", "36", "38")):
+            return "diners"
+        # Prefixos comuns Elo
+        elo_prefixes = ("401178", "401179", "431274", "438935", "451416", "457393", "457631", "457632", "504175", "506699", "5067", "5090", "627780", "636297", "636368")
+        if num.startswith(elo_prefixes):
+            return "elo"
+        return "visa" # Fallback padrão
+        
+    brand = detect_brand(clean_card)
+    
     # 1. Tokenize the card securely via Mercado Pago API
     token_url = f"https://api.mercadopago.com/v1/card_tokens?public_key={MP_PUBLIC_KEY}"
     token_payload = {
@@ -1873,7 +1893,7 @@ def charge_card_payment(payload: CardPaymentRequest, db: Session = Depends(get_d
             "token": token_id,
             "description": plan["title"],
             "installments": 1,
-            "payment_method_id": "visa" if clean_card.startswith("4") else "master",
+            "payment_method_id": brand,
             "payer": {
                 "email": payload.user_email
             }
@@ -1901,7 +1921,7 @@ def charge_card_payment(payload: CardPaymentRequest, db: Session = Depends(get_d
                 "status": "approved",
                 "transaction_id": tx.id,
                 "card_last4": clean_card[-4:],
-                "card_brand": "Visa" if clean_card.startswith("4") else "Mastercard"
+                "card_brand": brand.capitalize()
             }
         else:
             raise HTTPException(status_code=400, detail=pay_data.get("message", "Pagamento recusado."))
@@ -1923,7 +1943,7 @@ def charge_card_payment(payload: CardPaymentRequest, db: Session = Depends(get_d
             "status": "approved",
             "transaction_id": tx.id,
             "card_last4": clean_card[-4:] if len(clean_card) >= 4 else "1111",
-            "card_brand": "Visa" if clean_card.startswith("4") else "Mastercard",
+            "card_brand": brand.capitalize(),
             "note": "Aprovado via fallback seguro local."
         }
 
