@@ -1645,6 +1645,7 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
 
         payment_id = data.get("id")
         pix_data = data.get("point_of_interaction", {}).get("transaction_data", {})
+        ticket_url = data.get("transaction_details", {}).get("ticket_url") or pix_data.get("ticket_url", "")
 
         # Save pending transaction
         tx = FinancialTransaction(
@@ -1664,6 +1665,7 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
             "transaction_id": tx.id,
             "qr_code": pix_data.get("qr_code", ""),
             "qr_code_base64": pix_data.get("qr_code_base64", ""),
+            "ticket_url": ticket_url,
             "amount": plan["amount"],
             "title": plan["title"],
             "status": "pending"
