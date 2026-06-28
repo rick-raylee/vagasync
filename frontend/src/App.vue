@@ -513,18 +513,7 @@ const handleLogin = (e) => {
   showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'}.`, 'success');
 };
 
-const showLinkedinSimulationModal = ref(false);
-
-const simulateLinkedinLogin = () => {
-  localStorage.setItem('vagasync_logged', 'true');
-  localStorage.setItem('vagasync_role', 'candidate');
-  userRole.value = 'candidate';
-  isLoggedIn.value = true;
-  activeTab.value = 'dashboard';
-  authForm.value.name = 'Bruno Santos';
-  authForm.value.email = 'bruno.santos@outlook.com';
-  showToast('Login LinkedIn (Simulado)', 'Login de testes autorizado com sucesso.', 'success');
-};
+const showLinkedinOAuthModal = ref(false);
 
 const saveCredentialsAndLoginReal = async () => {
   if (!config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
@@ -552,14 +541,9 @@ const saveCredentialsAndLoginReal = async () => {
 
 const handleLinkedinLogin = () => {
   if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
-    // Abrir o pop-up de autorização do LinkedIn simulado (realista e sem burocracia)
-    const width = 600;
-    const height = 700;
-    const left = (window.screen.width - width) / 2;
-    const top = (window.screen.height - height) / 2;
-    window.open('/linkedin-mock-auth.html', 'LinkedInAuth', `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`);
+    showToast('Configuração Requerida', 'Por favor, configure suas chaves do LinkedIn para prosseguir com o login real.', 'info');
+    showLinkedinOAuthModal.value = true;
   } else {
-    // Credenciais OK — redirecionar para o OAuth real do LinkedIn
     window.location.href = `${API_BASE}/linkedin/login`;
   }
 };
@@ -2414,7 +2398,7 @@ const restoreCandidate = () => {
     </div>
 
     <!-- LinkedIn OAuth Setup Modal -->
-    <div v-if="showLinkedinSimulationModal" class="modal-overlay" style="
+    <div v-if="showLinkedinOAuthModal" class="modal-overlay" style="
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(3, 5, 12, 0.97); backdrop-filter: blur(16px);
       display: flex; align-items: center; justify-content: center; z-index: 10000;
@@ -2493,7 +2477,7 @@ const restoreCandidate = () => {
           type="button" 
           class="btn btn-secondary" 
           style="padding: 0.6rem; font-size: 0.85rem;"
-          @click="showLinkedinSimulationModal = false;"
+          @click="showLinkedinOAuthModal = false;"
         >
           Usar e-mail e senha
         </button>
@@ -2780,9 +2764,9 @@ const restoreCandidate = () => {
                 type="button" 
                 class="btn social-btn-linkedin"
                 @click="handleLinkedinLogin"
-                style="position: relative; overflow: hidden;"
+                style="position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px;"
               >
-                <img src="/icons/3d/login.png" style="width: 20px; height: 20px; object-fit: contain; flex-shrink: 0;" alt="LinkedIn" />
+                <i class="fa-brands fa-linkedin" style="font-size: 1.25rem; color: #fff;"></i>
                 Entrar com LinkedIn
               </button>
 
