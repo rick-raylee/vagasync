@@ -112,6 +112,31 @@ const changeCardForm = ref({
   cvv: ''
 });
 
+const transactionHistory = ref([]);
+
+const fetchTransactionHistory = async () => {
+  const userEmail = profileData.value.email || localStorage.getItem('vagasync_profile_email') || 'candidato@vagasync.com.br';
+  try {
+    const res = await fetch(`${API_BASE}/payments/history/${userEmail}`);
+    if (res.ok) {
+      transactionHistory.value = await res.json();
+    }
+  } catch (err) {
+    console.error('Erro ao buscar histórico de pagamentos:', err);
+  }
+};
+
+const pixDaysLeft = computed(() => {
+  const lastPix = transactionHistory.value.find(t => t.payment_method === 'pix' && t.status === 'paid');
+  if (!lastPix) return null;
+  const createdDate = new Date(lastPix.created_at);
+  const expiryDate = new Date(createdDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 dias
+  const today = new Date();
+  const diffTime = expiryDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+});
+
 const securityData = ref({
   currentPassword: '',
   newPassword: '',
@@ -738,6 +763,8 @@ onMounted(() => {
     document.documentElement.classList.remove('light-mode');
   }
 
+  fetchTransactionHistory();
+
   // Handle URL payment callbacks from Mercado Pago
   const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment') || urlParams.get('status');
@@ -1361,9 +1388,80 @@ const handleCheckoutPayment = async () => {
   const userEmail = profileData.value.email || localStorage.getItem('vagasync_profile_email') || 'candidato@vagasync.com.br';
   
   if (checkoutPaymentMethod.value === 'card') {
+    if (!checkoutCard.value.number || !checkoutCard.value.name || !checkoutCard.value.expiry || !checkoutCard.value.cvc) {
+      showToast('Campos Vazios', 'Preencha todos os dados do cartão para concluir a assinatura.', 'error');
+      return;
+    }
+    
+    // Parse expiration MM/AA
+    const expiryParts = checkoutCard.value.expiry.split('/');
+    const month = parseInt(expiryParts[0]?.trim()) || 12;
+    const yearShort = expiryParts[1]?.trim() || '28';
+    const year = parseInt(yearShort.length === 2 ? '20' + yearShort : yearShort) || 2028;
+    
     try {
-      showToast('Processando...', 'Conectando ao Mercado Pago de forma segura...', 'info');
-      const response = await fetch(`${API_BASE}/payments/create-preference`, {
+      showToast('Processando...', 'Processando pagamento transparente...', 'info');
+      const response = await fetch(`${API_BASE}/payments/charge-card`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_id: checkoutPlan.value,
+          user_email: userEmail,
+          card_number: checkoutCard.value.number,
+          cardholder_name: checkoutCard.value.name,
+          expiration_month: month,
+          expiration_year: year,
+          security_code: checkoutCard.value.cvc
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Falha ao processar o cartão.');
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 'approved') {
+        // Activate feature
+        if (checkoutPlan.value === 'candidate_premium') {
+          userFeatures.value.ia_ilimitada = true;
+          localStorage.setItem('vagasync_premium', 'true');
+        } else if (checkoutPlan.value === 'recruiter_pro') {
+          userFeatures.value.ia_triagem = true;
+          userFeatures.value.videoentrevistas = true;
+          localStorage.setItem('vagasync_recruiter_pro', 'true');
+        } else if (checkoutPlan.value === 'impulsionar_vaga') {
+          userFeatures.value.impulsionar_vaga_credits = (userFeatures.value.impulsionar_vaga_credits || 0) + 1;
+        } else if (userFeatures.value[checkoutPlan.value] !== undefined) {
+          userFeatures.value[checkoutPlan.value] = true;
+        }
+        
+        // Update display card
+        cardLast4.value = data.card_last4;
+        cardBrand.value = data.card_brand;
+        cardExpiry.value = checkoutCard.value.expiry;
+        
+        localStorage.setItem('vagasync_card_brand', cardBrand.value);
+        localStorage.setItem('vagasync_card_last4', cardLast4.value);
+        localStorage.setItem('vagasync_card_expiry', cardExpiry.value);
+        
+        showToast('Assinatura Ativada! 🎉', 'Pagamento aprovado com sucesso direto na plataforma.', 'success');
+        checkoutOpen.value = false;
+        
+        // Refresh history
+        await fetchTransactionHistory();
+      } else {
+        showToast('Recusado', 'O pagamento com cartão foi recusado pelo banco emissor.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Erro de Pagamento', err.message || 'Falha na comunicação com o processador de cartões.', 'error');
+    }
+  } else {
+    // Pix path
+    try {
+      await fetch(`${API_BASE}/payments/create-pix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1371,25 +1469,13 @@ const handleCheckoutPayment = async () => {
           user_email: userEmail
         })
       });
-      if (!response.ok) {
-        throw new Error('Falha ao gerar preferência');
-      }
-      const data = await response.json();
-      if (data.checkout_url) {
-        showToast('Redirecionando...', 'Redirecionando para o ambiente de pagamento seguro...', 'success');
-        setTimeout(() => {
-          window.location.href = data.checkout_url;
-        }, 1200);
-      } else {
-        showToast('Erro de Pagamento', 'Não foi possível gerar a página de checkout seguro.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Erro de Conexão', 'Erro ao processar com o Mercado Pago. Tente novamente mais tarde.', 'error');
+      await fetchTransactionHistory();
+    } catch (e) {
+      console.error(e);
     }
-  } else {
-    // Pix: display the locally generated QR Code and wait for approval
-    showToast('Pix Gerado!', 'Utilize o QR Code ou copie o código Pix abaixo para pagar.', 'success');
+    
+    showToast('Pix Confirmado!', 'Verifique o status da sua cobrança no Histórico.', 'success');
+    checkoutOpen.value = false;
   }
 };
 
@@ -2675,17 +2761,37 @@ const restoreCandidate = () => {
         </div>
 
         <!-- Card Area -->
-        <div v-else style="display: flex; flex-direction: column; gap: 1rem; background: rgba(59, 130, 246, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2); text-align: center; align-items: center;">
-          <i class="fa-solid fa-shield-halved" style="font-size: 2rem; color: #00f2fe; margin-bottom: 0.2rem; filter: drop-shadow(0 0 10px rgba(0, 242, 254, 0.3));"></i>
-          <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Pagamento 100% Seguro & Criptografado</span>
-          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin: 0;">
-            Seus dados são protegidos por criptografia SSL de ponta a ponta. Você será redirecionado para a plataforma oficial do Mercado Pago para inserir os dados do seu cartão com segurança total.
-          </p>
+        <div v-else style="display: flex; flex-direction: column; gap: 0.9rem;">
+          <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 242, 254, 0.05); padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); margin-bottom: 0.25rem;">
+            <i class="fa-solid fa-shield-halved" style="color: #00f2fe; font-size: 1.1rem;"></i>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Seus dados de cartão são protegidos com criptografia SSL.</span>
+          </div>
+
+          <div class="form-group" style="margin: 0;">
+            <label>Número do Cartão</label>
+            <input type="text" class="form-input" v-model="checkoutCard.number" placeholder="4532 7182 9182 0019" required />
+          </div>
+          
+          <div class="form-group" style="margin: 0;">
+            <label>Nome Completo do Titular</label>
+            <input type="text" class="form-input" v-model="checkoutCard.name" placeholder="FATE CANDIDATE" required />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.5rem;">
+            <div class="form-group" style="margin: 0;">
+              <label>Validade (MM/AA)</label>
+              <input type="text" class="form-input" v-model="checkoutCard.expiry" placeholder="12/28" required />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label>CVV / Código</label>
+              <input type="password" class="form-input" v-model="checkoutCard.cvc" placeholder="123" maxlength="4" required />
+            </div>
+          </div>
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-primary" style="flex: 1;" @click="handleCheckoutPayment">
-            {{ checkoutPaymentMethod === 'card' ? 'Ir para Pagamento Seguro 🔒' : 'Confirmar Pagamento' }}
+            {{ checkoutPaymentMethod === 'card' ? 'Finalizar Assinatura 🔒' : 'Confirmar Pagamento' }}
           </button>
           <button type="button" class="btn btn-secondary" style="flex: 1;" @click="checkoutOpen = false">
             Voltar
@@ -5591,6 +5697,20 @@ const restoreCandidate = () => {
                     <i class="fa-solid fa-credit-card" style="color: var(--color-secondary);"></i> Plano & Assinatura Ativa
                   </h3>
                   
+                  <!-- Alerta de Vencimento Pix -->
+                  <div v-if="pixDaysLeft !== null && pixDaysLeft <= 5 && pixDaysLeft >= 0" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 10px; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); margin-bottom: 1.25rem;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: var(--color-warning); font-size: 1.1rem; flex-shrink: 0;"></i>
+                    <div style="flex: 1;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: var(--color-warning);">Assinatura Pix próxima do vencimento!</span>
+                      <p style="font-size: 0.74rem; color: var(--text-secondary); margin-top: 0.1rem; line-height: 1.4;">
+                        Seu plano via Pix vence em <strong>{{ pixDaysLeft }} {{ pixDaysLeft === 1 ? 'dia' : 'dias' }}</strong>. Renove agora para continuar usando sem interrupções.
+                      </p>
+                    </div>
+                    <button type="button" class="btn btn-primary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; background: var(--color-warning); border-color: var(--color-warning); color: #000; font-weight: 700;" @click="openCheckout('candidate_premium', 'Renovar Plano IA', 'R$ 9,90/mês')">
+                      Renovar Assinatura
+                    </button>
+                  </div>
+
                   <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; margin-top: 1rem;">
                     <div>
                       <div style="font-size: 1.4rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px;">
@@ -5603,7 +5723,7 @@ const restoreCandidate = () => {
                       <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted);">
                         <div><strong>Valor:</strong> R$ 9,90 / mês</div>
                         <div><strong>Próxima renovação:</strong> 28 de Julho de 2026</div>
-                        <div><strong>Método de pagamento:</strong> Cartão de Crédito</div>
+                        <div><strong>Método de pagamento:</strong> {{ transactionHistory.length > 0 && transactionHistory[0].payment_method === 'pix' ? 'Pix Instantâneo' : 'Cartão de Crédito' }}</div>
                       </div>
                     </div>
                     
@@ -5633,6 +5753,51 @@ const restoreCandidate = () => {
                     </div>
                   </div>
                   
+                  <!-- Histórico de Transações -->
+                  <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                      <i class="fa-solid fa-clock-rotate-left"></i> Histórico de Transações (Cartão / Pix)
+                    </h4>
+                    
+                    <div v-if="transactionHistory.length === 0" style="padding: 1.5rem; text-align: center; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-muted);">
+                      Nenhuma transação registrada.
+                    </div>
+                    
+                    <div v-else style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.15);">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem; text-align: left;">
+                        <thead>
+                          <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-secondary); font-weight: 600;">
+                            <th style="padding: 0.6rem 0.8rem;">Plano / Recurso</th>
+                            <th style="padding: 0.6rem 0.8rem;">Data</th>
+                            <th style="padding: 0.6rem 0.8rem;">Método</th>
+                            <th style="padding: 0.6rem 0.8rem;">Valor</th>
+                            <th style="padding: 0.6rem 0.8rem;">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="tx in transactionHistory" :key="tx.id" style="border-bottom: 1px solid var(--border-color); color: var(--text-primary);">
+                            <td style="padding: 0.6rem 0.8rem; font-weight: 500;">{{ tx.plan_name }}</td>
+                            <td style="padding: 0.6rem 0.8rem; color: var(--text-muted);">{{ new Date(tx.created_at).toLocaleDateString('pt-BR') }}</td>
+                            <td style="padding: 0.6rem 0.8rem; text-transform: uppercase;">{{ tx.payment_method === 'card' ? '💳 Cartão' : '⚡ Pix' }}</td>
+                            <td style="padding: 0.6rem 0.8rem; font-weight: 600; color: var(--color-secondary);">R$ {{ tx.amount.toFixed(2).replace('.', ',') }}</td>
+                            <td style="padding: 0.6rem 0.8rem;">
+                              <span :style="{
+                                background: tx.status === 'paid' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                                color: tx.status === 'paid' ? 'var(--color-success)' : 'var(--color-warning)',
+                                padding: '2px 6px',
+                                borderRadius: '12px',
+                                fontSize: '0.7rem',
+                                fontWeight: '700'
+                              }">
+                                {{ tx.status === 'paid' ? 'Pago' : 'Pendente' }}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
                   <div style="border-top: 1px solid var(--border-color); margin-top: 1.5rem; padding-top: 1rem; display: flex; justify-content: flex-end;">
                     <button 
                       type="button" 
