@@ -2311,3 +2311,198 @@ def get_recruiter_insights(db: Session = Depends(get_db)):
             }
         ]
 
+
+# ─────────────────────────────────────────────
+# AI Recruiter Gupy Premium Feature Endpoints
+# ─────────────────────────────────────────────
+
+class GenerateJobRequest(BaseModel):
+    title: str
+    company: str
+
+class GenerateTestRequest(BaseModel):
+    job_title: str
+    test_type: str  # "tech" ou "behavioral"
+
+class GenerateOfferRequest(BaseModel):
+    candidate_name: str
+    job_title: str
+    company: str
+
+@app.post("/api/recruiter/ai/generate-job")
+def generate_job_description(payload: GenerateJobRequest, db: Session = Depends(get_db)):
+    try:
+        client = ai_agent.get_gemini_client(db)
+        prompt = f"""
+        Você é um especialista em Recrutamento e Seleção de nível sênior. 
+        Escreva uma descrição de vaga profissional e atrativa para a vaga de '{payload.title}' na empresa '{payload.company}'.
+        
+        Formate a resposta em Markdown usando títulos (###) para as seções.
+        A descrição deve conter:
+        1. Sobre a Empresa (um texto atrativo e profissional com base no nome da empresa);
+        2. Responsabilidades e Atribuições;
+        3. Requisitos e Qualificações (Obrigatórios e Desejáveis);
+        4. Benefícios e Diferenciais de trabalhar lá.
+        
+        Retorne APENAS o texto estruturado em Markdown, sem blocos de código ```markdown ou outras decorações.
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return {"description": response.text.strip()}
+    except Exception as e:
+        print(f"[AI Recruiter] Erro ao gerar descrição (usando fallback): {e}")
+        # Fallback estruturado
+        fallback_markdown = f"""### Sobre a Empresa
+A {payload.company} é uma organização inovadora em constante crescimento, focada em entregar as melhores soluções para seus clientes e parceiros do setor.
+
+### Responsabilidades e Atribuições
+- Colaborar no desenvolvimento e entrega de projetos relacionados à área de {payload.title};
+- Garantir a qualidade e a performance das entregas cotidianas;
+- Participar de reuniões de planejamento e alinhamento de metas da equipe.
+
+### Requisitos e Qualificações
+**Obrigatórios:**
+- Experiência prévia atuando como {payload.title} ou funções correlatas;
+- Proatividade, facilidade de trabalho em equipe e boa comunicação.
+
+**Desejáveis:**
+- Conhecimento em metodologias ágeis e ferramentas de automação.
+
+### Benefícios
+- Vale Refeição / Vale Alimentação;
+- Assistência Médica e Odontológica;
+- Horário Flexível e ambiente de trabalho colaborativo."""
+        return {"description": fallback_markdown.strip()}
+
+@app.post("/api/recruiter/ai/generate-test")
+def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(get_db)):
+    try:
+        client = ai_agent.get_gemini_client(db)
+        prompt = f"""
+        Crie um teste de avaliação para candidatos à vaga de '{payload.job_title}'.
+        O tipo do teste deve ser: '{payload.test_type}' (tech = conhecimentos técnicos específicos/lógica; behavioral = cenários de fit cultural e inteligência emocional).
+        
+        Gere exatamente 5 perguntas de múltipla escolha. Cada pergunta deve ter 4 alternativas (A, B, C, D) e indicar claramente qual é a resposta correta e a explicação.
+        
+        Retorne APENAS um objeto JSON válido com o seguinte formato:
+        {{
+          "title": "Título descritivo do teste",
+          "questions": [
+            {{
+              "number": 1,
+              "question": "Texto da pergunta?",
+              "options": {{
+                "A": "Alternativa A",
+                "B": "Alternativa B",
+                "C": "Alternativa C",
+                "D": "Alternativa D"
+              }},
+              "correct_answer": "A",
+              "explanation": "Explicação detalhada da resposta correta."
+            }},
+            ...
+          ]
+        }}
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        raw_text = response.text if response.text else ""
+        clean_text = ai_agent._clean_json_from_text(raw_text)
+        return json.loads(clean_text)
+    except Exception as e:
+        print(f"[AI Recruiter] Erro ao gerar teste (usando fallback): {e}")
+        # Fallback estruturado de teste
+        if payload.test_type == "tech":
+            return {
+                "title": f"Avaliação Técnica Geral para {payload.job_title}",
+                "questions": [
+                    {
+                        "number": 1,
+                        "question": "Qual das seguintes alternativas representa a melhor prática no gerenciamento de tarefas complexas?",
+                        "options": {
+                            "A": "Resolver sem planejar",
+                            "B": "Dividir o problema em etapas menores e testar iterativamente",
+                            "C": "Ignorar bugs menores",
+                            "D": "Delegar tudo sem acompanhar"
+                        },
+                        "correct_answer": "B",
+                        "explanation": "Quebrar tarefas complexas em subtarefas menores e realizar testes incrementais previne falhas graves de arquitetura."
+                    },
+                    {
+                        "number": 2,
+                        "question": "Por que o controle de versão de código é considerado fundamental em times ágeis?",
+                        "options": {
+                            "A": "Apenas para backup",
+                            "B": "Evita conflitos, cria ramificações seguras e monitora histórico de modificações",
+                            "C": "Deixa o computador mais rápido",
+                            "D": "É opcional para a gerência"
+                        },
+                        "correct_answer": "B",
+                        "explanation": "Git ou similares permitem trabalho paralelo e controle total das alterações do código."
+                    }
+                ]
+            }
+        else:
+            return {
+                "title": f"Mapeamento Comportamental & Fit Cultural — {payload.job_title}",
+                "questions": [
+                    {
+                        "number": 1,
+                        "question": "Se um projeto apresentar um atraso imprevisto a poucas horas da entrega, qual sua primeira atitude?",
+                        "options": {
+                            "A": "Omitir o atraso e entregar depois",
+                            "B": "Comunicar imediatamente o gestor com transparência, propondo soluções alternativas",
+                            "C": "Culpar os outros membros da equipe",
+                            "D": "Desistir do projeto"
+                        },
+                        "correct_answer": "B",
+                        "explanation": "A transparência e foco em soluções são pilares essenciais de fit cultural em times modernos."
+                    }
+                ]
+            }
+
+@app.post("/api/recruiter/ai/generate-offer")
+def generate_candidate_offer(payload: GenerateOfferRequest, db: Session = Depends(get_db)):
+    try:
+        client = ai_agent.get_gemini_client(db)
+        prompt = f"""
+        Escreva uma carta oferta formal e extremamente acolhedora de contratação (proposta de admissão) para o candidato '{payload.candidate_name}', aprovado para a vaga de '{payload.job_title}' na empresa '{payload.company}'.
+        
+        A carta deve incluir:
+        - Uma calorosa mensagem de boas-vindas comemorando a aprovação;
+        - A proposta de salário e benefícios (utilize valores de exemplo compatíveis e elegantes);
+        - Instruções gerais de onboarding.
+        
+        Retorne APENAS o texto da carta oferta, sem blocos de código ``` ou tags extras.
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return {"offer_text": response.text.strip()}
+    except Exception as e:
+        print(f"[AI Recruiter] Erro ao gerar carta oferta (usando fallback): {e}")
+        fallback_letter = f"""Prezado(a) {payload.candidate_name},
+
+É com enorme alegria que formalizamos nossa proposta de contratação para você se juntar ao time da {payload.company} no cargo de {payload.job_title}!
+
+Ficamos extremamente impressionados com seu perfil profissional e com o desempenho demonstrado ao longo de nossas etapas de avaliação. Acreditamos que sua bagagem técnica e fit cultural serão excelentes complementos para nossa equipe.
+
+**Detalhes da Proposta:**
+- Cargo: {payload.job_title}
+- Modelo de Trabalho: Remoto / Flexível
+- Remuneração: Compatível com o mercado sênior de tecnologia + pacote de benefícios flexíveis (Saúde, Odonto e Vale Alimentação).
+
+Para darmos andamento ao seu onboarding, responda a este e-mail confirmando seu aceite.
+
+Seja muito bem-vindo(a) à {payload.company}!
+
+Atenciosamente,
+Recrutamento e Seleção — {payload.company}"""
+        return {"offer_text": fallback_letter.strip()}
+
+

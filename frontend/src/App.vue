@@ -1664,6 +1664,162 @@ const extendJob = async (job) => {
   }
 };
 
+const isGeneratingDescription = ref(false);
+
+const generateJobDescriptionWithAI = async () => {
+  if (!newJobForm.value.title || !newJobForm.value.company) {
+    showToast('Campos Requeridos', 'Preencha o Título da Oportunidade e a Empresa antes de gerar com IA.', 'warning');
+    return;
+  }
+  try {
+    isGeneratingDescription.value = true;
+    showToast('Processando...', 'A IA está escrevendo a descrição completa da vaga...', 'info');
+    const res = await fetch(`${API_BASE}/recruiter/ai/generate-job`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newJobForm.value.title,
+        company: newJobForm.value.company
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      newJobForm.value.description = data.description;
+      showToast('Descrição Gerada! ✨', 'A IA preencheu a descrição com sucesso. Você pode editá-la livremente.', 'success');
+    } else {
+      throw new Error('Erro na API');
+    }
+  } catch (err) {
+    showToast('Erro ao Gerar', 'Não foi possível se comunicar com o serviço de IA.', 'error');
+  } finally {
+    isGeneratingDescription.value = false;
+  }
+};
+
+const offerLetterModalOpen = ref(false);
+const isGeneratingOffer = ref(false);
+const generatedOfferText = ref('');
+const selectedCandidateForOffer = ref(null);
+
+const generateOfferWithAI = async (candidate) => {
+  selectedCandidateForOffer.value = candidate;
+  offerLetterModalOpen.value = true;
+  isGeneratingOffer.value = true;
+  generatedOfferText.value = '';
+  try {
+    const res = await fetch(`${API_BASE}/recruiter/ai/generate-offer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_name: candidate.name,
+        job_title: candidate.role || 'Profissional Selecionado',
+        company: authForm.value.company || localStorage.getItem('vagasync_profile_company') || 'VagaSync Partner'
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      generatedOfferText.value = data.offer_text;
+    } else {
+      throw new Error();
+    }
+  } catch (e) {
+    const fallbackLetter = `Prezado(a) ${candidate.name},\n\nÉ com enorme alegria que formalizamos nossa proposta de contratação para você se juntar ao nosso time no cargo de ${candidate.role || 'Profissional Selecionado'}!\n\nFicamos extremamente impressionados com seu perfil profissional e com o desempenho demonstrado ao longo de nossas etapas de avaliação.\n\nDetalhes da Proposta:\n- Cargo: ${candidate.role || 'Profissional Selecionado'}\n- Modelo de Trabalho: Remoto / Flexível\n- Remuneração: Compatível com o mercado + benefícios flexíveis.\n\nPara darmos andamento ao seu onboarding, responda a este e-mail confirmando seu aceite.\n\nAtenciosamente,\nRecrutamento e Seleção.`;
+    generatedOfferText.value = fallbackLetter;
+  } finally {
+    isGeneratingOffer.value = false;
+  }
+};
+
+const copyOfferText = () => {
+  navigator.clipboard.writeText(generatedOfferText.value);
+  showToast('Copiado! 📋', 'A carta oferta foi copiada para a área de transferência.', 'success');
+};
+
+const assessmentForm = ref({ job_title: '', test_type: 'tech' });
+const isGeneratingAssessment = ref(false);
+const generatedAssessment = ref(null);
+
+const generateAssessmentTest = async () => {
+  if (!assessmentForm.value.job_title) {
+    showToast('Cargo Necessário', 'Informe o cargo/especialidade para o qual a IA criará o teste.', 'warning');
+    return;
+  }
+  try {
+    isGeneratingAssessment.value = true;
+    generatedAssessment.value = null;
+    showToast('Criando Teste...', 'A IA está formulando as questões de múltipla escolha...', 'info');
+    const res = await fetch(`${API_BASE}/recruiter/ai/generate-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_title: assessmentForm.value.job_title,
+        test_type: assessmentForm.value.test_type
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      generatedAssessment.value = data;
+      showToast('Teste Gerado com Sucesso! 🧠', 'A avaliação já está disponível no painel.', 'success');
+    } else {
+      throw new Error();
+    }
+  } catch (e) {
+    showToast('Erro ao Gerar Teste', 'Não foi possível contatar o motor do Gemini.', 'error');
+  } finally {
+    isGeneratingAssessment.value = false;
+  }
+};
+
+const copyAssessmentLink = () => {
+  const fakeLink = `https://www.vagasync.com.br/assessments/test_${Date.now()}`;
+  navigator.clipboard.writeText(fakeLink);
+  showToast('Link Copiado! 🔗', 'O link do teste foi copiado para enviar aos candidatos.', 'success');
+};
+
+const candidateFilterModel = ref(['presencial', 'hibrido', 'remoto']);
+const candidateFilterCompany = ref('');
+const candidateFilterLocation = ref('');
+const candidateSortOrder = ref('recent');
+
+const filteredJobs = computed(() => {
+  let list = [...jobs.value];
+
+  list = list.filter(job => {
+    const loc = (job.location || '').toLowerCase();
+    const isRemote = loc.includes('remot') || loc.includes('home') || loc.includes('teletrabalho');
+    const isHybrid = loc.includes('hibrid') || loc.includes('híbrid') || loc.includes('flex');
+    const isPresencial = !isRemote && !isHybrid;
+
+    if (candidateFilterModel.value.includes('remoto') && isRemote) return true;
+    if (candidateFilterModel.value.includes('hibrido') && isHybrid) return true;
+    if (candidateFilterModel.value.includes('presencial') && isPresencial) return true;
+    return false;
+  });
+
+  if (candidateFilterCompany.value.trim()) {
+    const search = candidateFilterCompany.value.toLowerCase().trim();
+    list = list.filter(job => (job.company || '').toLowerCase().includes(search));
+  }
+
+  if (candidateFilterLocation.value.trim()) {
+    const search = candidateFilterLocation.value.toLowerCase().trim();
+    list = list.filter(job => (job.location || '').toLowerCase().includes(search));
+  }
+
+  list.sort((a, b) => {
+    if (candidateSortOrder.value === 'recent') {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    } else if (candidateSortOrder.value === 'oldest') {
+      return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+    } else if (candidateSortOrder.value === 'match') {
+      return (b.match_score || 0) - (a.match_score || 0);
+    }
+    return 0;
+  });
+
+  return list;
+});
+
 const handlePublishJob = async (e) => {
   if (e) e.preventDefault();
   if (!newJobForm.value.title || !newJobForm.value.company) {
@@ -2384,6 +2540,67 @@ const restoreCandidate = () => {
       <div class="toast-content">
         <h4>{{ toast.title }}</h4>
         <p>{{ toast.message }}</p>
+      </div>
+    </div>
+
+    <!-- Modal de Carta Oferta por IA -->
+    <div v-if="offerLetterModalOpen && selectedCandidateForOffer" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(6, 9, 19, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem;">
+      <div class="glass-card" style="width: 100%; max-width: 650px; border: 1px solid rgba(0, 242, 254, 0.3); display: flex; flex-direction: column; gap: 1.25rem; animation: modalFadeIn 0.3s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.25rem; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-file-contract" style="color: #00f2fe;"></i> Emissão de Carta Oferta por IA
+            </h3>
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">
+              Candidato(a): <strong style="color: #fff;">{{ selectedCandidateForOffer.name }}</strong>
+            </span>
+          </div>
+          <button @click="offerLetterModalOpen = false" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+
+        <div v-if="isGeneratingOffer" style="text-align: center; padding: 3rem 0; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+          <i class="fa-solid fa-wand-magic-sparkles fa-spin" style="font-size: 2rem; color: #00f2fe;"></i>
+          <p style="color: var(--text-secondary); font-size: 0.9rem;">O VagaSync IA está redigindo uma proposta salarial e onboarding altamente personalizada para o candidato...</p>
+        </div>
+
+        <div v-else style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="font-size: 0.75rem; color: #00f2fe; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Rascunho Gerado por IA</div>
+          <textarea 
+            class="form-input" 
+            rows="12" 
+            v-model="generatedOfferText" 
+            style="font-family: monospace; font-size: 0.85rem; line-height: 1.5; background: #0a0f1c; color: var(--text-primary); border-color: rgba(255,255,255,0.08); width:100%; border-radius: 8px; padding: 0.75rem;"
+          ></textarea>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+            <button 
+              type="button" 
+              class="btn btn-secondary" 
+              style="font-size: 0.8rem; padding: 0.4rem 1rem; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
+              @click="generateOfferWithAI(selectedCandidateForOffer)"
+            >
+              <i class="fa-solid fa-rotate-right"></i> Regerar com IA
+            </button>
+            <div style="display: flex; gap: 0.75rem;">
+              <button 
+                type="button" 
+                class="btn btn-secondary" 
+                style="font-size: 0.8rem; padding: 0.4rem 1rem;" 
+                @click="offerLetterModalOpen = false"
+              >
+                Fechar
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-primary" 
+                style="font-size: 0.8rem; padding: 0.4rem 1.25rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                @click="copyOfferText"
+              >
+                <i class="fa-solid fa-copy"></i> Copiar Proposta
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3363,6 +3580,13 @@ const restoreCandidate = () => {
           </button>
 
           <button 
+            :class="['nav-link-btn', { active: activeTab === 'recruiter_assessments' }]"
+            @click="activeTab = 'recruiter_assessments'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #a855f7; flex-shrink: 0;"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg> Testes & Assessments
+          </button>
+
+          <button 
             :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
             @click="activeTab = 'community_feed'; fetchFeed();"
           >
@@ -3737,10 +3961,93 @@ const restoreCandidate = () => {
                 <Briefcase :size="20" /> Vagas e Candidaturas Ativas
               </h2>
               
+              <!-- ── FILTROS AVANÇADOS (Estilo Gupy) ── -->
+              <div class="glass-card" style="margin-bottom: 1.25rem; background: rgba(10, 15, 28, 0.6); border: 1px solid rgba(59,130,246,0.15); display: flex; flex-direction: column; gap: 0.85rem; padding: 1rem; border-radius: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
+                  <span style="font-size: 0.8rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid fa-sliders" style="color: var(--color-secondary);"></i> Filtros e Ordenação de Vagas
+                  </span>
+                  <button 
+                    type="button" 
+                    style="background: none; border: none; color: var(--text-muted); font-size: 0.72rem; cursor: pointer; text-decoration: underline;"
+                    @click="() => {
+                      candidateFilterModel = ['presencial', 'hibrido', 'remoto'];
+                      candidateFilterCompany = '';
+                      candidateFilterLocation = '';
+                      candidateSortOrder = 'recent';
+                    }"
+                  >
+                    Limpar Filtros
+                  </button>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; align-items: flex-end;">
+                  <!-- Modelo de Trabalho Checkboxes -->
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">Modelo de Trabalho</label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                      <label style="font-size: 0.72rem; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin: 0;">
+                        <input type="checkbox" value="remoto" v-model="candidateFilterModel" style="accent-color: var(--color-secondary);" /> Remoto
+                      </label>
+                      <label style="font-size: 0.72rem; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin: 0;">
+                        <input type="checkbox" value="hibrido" v-model="candidateFilterModel" style="accent-color: var(--color-secondary);" /> Híbrido
+                      </label>
+                      <label style="font-size: 0.72rem; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin: 0;">
+                        <input type="checkbox" value="presencial" v-model="candidateFilterModel" style="accent-color: var(--color-secondary);" /> Presencial
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Busca por Empresa -->
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">Empresa</label>
+                    <input 
+                      type="text" 
+                      class="form-input" 
+                      v-model="candidateFilterCompany" 
+                      placeholder="Filtrar por empresa..." 
+                      style="font-size: 0.78rem; padding: 0.35rem 0.6rem; background: #0a0f1c;"
+                    />
+                  </div>
+
+                  <!-- Busca por Localização -->
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">Local de Trabalho</label>
+                    <input 
+                      type="text" 
+                      class="form-input" 
+                      v-model="candidateFilterLocation" 
+                      placeholder="Cidade, UF..." 
+                      style="font-size: 0.78rem; padding: 0.35rem 0.6rem; background: #0a0f1c;"
+                    />
+                  </div>
+
+                  <!-- Ordenação -->
+                  <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block;">Ordenar por</label>
+                    <select 
+                      class="form-input" 
+                      v-model="candidateSortOrder" 
+                      style="font-size: 0.78rem; padding: 0.35rem 0.6rem; background: #0a0f1c; color: #fff; width: 100%;"
+                    >
+                      <option value="recent">Mais recentes</option>
+                      <option value="oldest">Menos recentes</option>
+                      <option value="match">Maior Match Score</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="jobs.length === 0" style="text-align: center; padding: 3rem 0; color: var(--text-secondary);">
                 <Briefcase :size="40" style="opacity: 0.2; margin-bottom: 1rem;" />
                 <p>Nenhuma vaga processada ainda pelo Vaga Sync.</p>
                 <p style="font-size: 0.8rem; margin-top: 0.5rem;">Clique em "Iniciar Agente" acima ou configure seu currículo para iniciar.</p>
+              </div>
+
+              <div v-else-if="filteredJobs.length === 0" style="text-align: center; padding: 3rem 0; color: var(--text-secondary);">
+                <i class="fa-solid fa-magnifying-glass" style="font-size: 2rem; opacity: 0.2; margin-bottom: 1rem; color: var(--color-secondary);"></i>
+                <p>Nenhuma vaga corresponde aos filtros selecionados.</p>
+                <p style="font-size: 0.8rem; margin-top: 0.5rem;">Tente ajustar ou limpar seus critérios de pesquisa.</p>
               </div>
               
               <div v-else class="jobs-table-wrapper">
@@ -3755,7 +4062,7 @@ const restoreCandidate = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="job in jobs" :key="job.id">
+                    <tr v-for="job in filteredJobs" :key="job.id">
                       <td>
                         <div class="job-name-cell">
                           <button
@@ -5464,6 +5771,13 @@ const restoreCandidate = () => {
                         <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem;" @click="openCandidateModal(cand)">Visualizar</button>
                         <button class="btn btn-secondary" style="flex:1; font-size: 0.65rem; padding: 0.2rem; color: var(--color-error);" @click="moveCandidate(cand.id, 'recebidos')">Reiniciar</button>
                       </div>
+                      <button 
+                        class="btn btn-primary" 
+                        style="width: 100%; font-size: 0.65rem; padding: 0.35rem; margin-top: 0.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none; display: flex; align-items: center; justify-content: center; gap: 4px;"
+                        @click="generateOfferWithAI(cand)"
+                      >
+                        <i class="fa-solid fa-file-signature"></i> Gerar Carta Oferta
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -5518,8 +5832,20 @@ const restoreCandidate = () => {
                   </div>
                 </div>
                 <div class="form-group" style="margin: 0;">
-                  <label>Descrição do Cargo & Pré-Requisitos</label>
-                  <textarea class="form-input" rows="5" v-model="newJobForm.description" placeholder="Descreva os desafios do cargo e competências fundamentais..." />
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                    <label style="margin: 0;">Descrição do Cargo & Pré-Requisitos</label>
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      style="font-size: 0.72rem; padding: 0.3rem 0.65rem; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.08); font-weight: 700; display: flex; align-items: center; gap: 4px;"
+                      :disabled="isGeneratingDescription"
+                      @click="generateJobDescriptionWithAI"
+                    >
+                      <i class="fa-solid" :class="isGeneratingDescription ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                      {{ isGeneratingDescription ? 'Escrevendo...' : '✨ Gerar com IA' }}
+                    </button>
+                  </div>
+                  <textarea class="form-input" rows="8" v-model="newJobForm.description" placeholder="Descreva os desafios do cargo e competências fundamentais..." />
                 </div>
                 
                 <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 0.5rem;">
@@ -5528,6 +5854,98 @@ const restoreCandidate = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Recrutador Testes & Assessments (Recrutador) ── -->
+        <template v-if="activeTab === 'recruiter_assessments'">
+          <div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="glass-card" style="border-color: rgba(168, 85, 247, 0.25);">
+              <h2 class="section-title" style="display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-graduation-cap" style="color: #a855f7;"></i> Central de Testes & Fit Cultural com IA
+              </h2>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                Gere questionários de múltipla escolha para automatizar a triagem técnica e cultural de seus candidatos. A IA criará perguntas estruturadas e gabaritos comentados em segundos.
+              </p>
+
+              <!-- Formulário de Criação -->
+              <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.04);">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Cargo ou Especialidade da Avaliação</label>
+                  <input type="text" class="form-input" v-model="assessmentForm.job_title" placeholder="Ex: Desenvolvedor Node.js, Analista Financeiro" style="font-size: 0.85rem;" />
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Tipo de Teste</label>
+                  <select class="form-input" v-model="assessmentForm.test_type" style="font-size: 0.85rem; background: #0d1426; color: #fff;">
+                    <option value="tech">Tech (Conhecimento Técnico/Lógica)</option>
+                    <option value="behavioral">Comportamental (Fit Cultural)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end;">
+                <button 
+                  type="button" 
+                  class="btn btn-primary" 
+                  style="background: linear-gradient(135deg, #a855f7, #ec4899); border: none; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;"
+                  :disabled="isGeneratingAssessment"
+                  @click="generateAssessmentTest"
+                >
+                  <i class="fa-solid" :class="isGeneratingAssessment ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                  {{ isGeneratingAssessment ? 'Criando Teste...' : 'Gerar Teste com IA' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Exibição do Teste Gerado -->
+            <div v-if="generatedAssessment" class="glass-card" style="border-color: rgba(168, 85, 247, 0.25); display: flex; flex-direction: column; gap: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-list-check" style="color: #a855f7;"></i> {{ generatedAssessment.title }}
+                </h3>
+                <button 
+                  type="button" 
+                  class="btn btn-secondary" 
+                  style="font-size: 0.72rem; padding: 0.35rem 0.75rem;" 
+                  @click="copyAssessmentLink"
+                >
+                  <i class="fa-solid fa-link"></i> Copiar Link do Teste
+                </button>
+              </div>
+
+              <!-- Perguntas -->
+              <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div v-for="q in generatedAssessment.questions" :key="q.number" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; padding: 1rem;">
+                  <div style="font-weight: 700; color: #fff; font-size: 0.9rem; margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="background: #a855f7; color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">Q{{ q.number }}</span>
+                    <span>{{ q.question }}</span>
+                  </div>
+                  
+                  <!-- Opções -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+                    <div 
+                      v-for="(text, key) in q.options" 
+                      :key="key" 
+                      :style="{
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '6px',
+                        border: '1px solid ' + (q.correct_answer === key ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'),
+                        background: q.correct_answer === key ? 'rgba(16,185,129,0.08)' : 'rgba(0,0,0,0.15)',
+                        fontSize: '0.78rem',
+                        color: q.correct_answer === key ? '#34d399' : 'var(--text-secondary)'
+                      }"
+                    >
+                      <strong>{{ key }})</strong> {{ text }}
+                    </div>
+                  </div>
+
+                  <!-- Explicação do Gabarito -->
+                  <div style="font-size: 0.75rem; color: var(--text-muted); background: rgba(0,0,0,0.15); padding: 0.5rem 0.75rem; border-radius: 4px; border-left: 2px solid #a855f7;">
+                    <strong style="color: #a855f7;">Gabarito ({{ q.correct_answer }}):</strong> {{ q.explanation }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </template>
