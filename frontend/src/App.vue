@@ -3067,13 +3067,13 @@ const restoreCandidate = () => {
         <!-- PREMIUM TAB SWITCHER (Pix vs Card) -->
         <div style="
           display: flex; 
-          background: rgba(10, 15, 28, 0.8); 
-          padding: 4px; 
+          background: rgba(10, 15, 28, 0.95); 
+          padding: 6px; 
           border-radius: 12px; 
-          border: 1px solid rgba(255, 255, 255, 0.08); 
-          gap: 6px; 
+          border: 1px solid rgba(59, 130, 246, 0.15); 
+          gap: 4px; 
           margin-bottom: 1.5rem;
-          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+          box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
         ">
           <!-- Pix Tab Button -->
           <button 
@@ -3084,27 +3084,27 @@ const restoreCandidate = () => {
               align-items: center; 
               justify-content: center; 
               gap: 8px; 
-              padding: 0.7rem; 
-              font-size: 0.85rem; 
+              padding: 0.65rem; 
+              font-size: 0.82rem; 
               font-weight: 700;
-              border-radius: 9px; 
+              border-radius: 8px; 
               cursor: pointer;
-              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-              border: 1px solid transparent;
+              transition: all 0.25s ease-in-out;
             "
             :style="checkoutPaymentMethod === 'pix' ? {
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(0, 242, 254, 0.25))',
-              border: '1px solid rgba(0, 242, 254, 0.4)',
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(0, 242, 254, 0.2))',
+              border: '1px solid rgba(0, 242, 254, 0.4) !important',
               color: '#00f2fe',
-              textShadow: '0 0 10px rgba(0, 242, 254, 0.5)',
-              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.15)'
+              textShadow: '0 0 8px rgba(0, 242, 254, 0.4)',
+              boxShadow: '0 4px 12px rgba(0, 242, 254, 0.12)'
             } : {
               background: 'transparent',
-              color: 'var(--text-secondary)'
+              border: 'none !important',
+              color: '#64748b'
             }"
             @click="checkoutPaymentMethod = 'pix'"
           >
-            <i class="fa-solid fa-pix" style="font-size: 1.1rem; filter: drop-shadow(0 0 5px rgba(0,242,254,0.3));"></i>
+            <i class="fa-solid fa-pix" style="font-size: 1.15rem; filter: drop-shadow(0 0 5px rgba(0,242,254,0.3));"></i>
             Pix Instantâneo
           </button>
           
@@ -3117,27 +3117,27 @@ const restoreCandidate = () => {
               align-items: center; 
               justify-content: center; 
               gap: 8px; 
-              padding: 0.7rem; 
-              font-size: 0.85rem; 
+              padding: 0.65rem; 
+              font-size: 0.82rem; 
               font-weight: 700;
-              border-radius: 9px; 
+              border-radius: 8px; 
               cursor: pointer;
-              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-              border: 1px solid transparent;
+              transition: all 0.25s ease-in-out;
             "
             :style="checkoutPaymentMethod === 'card' ? {
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(0, 242, 254, 0.25))',
-              border: '1px solid rgba(0, 242, 254, 0.4)',
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(0, 242, 254, 0.2))',
+              border: '1px solid rgba(0, 242, 254, 0.4) !important',
               color: '#00f2fe',
-              textShadow: '0 0 10px rgba(0, 242, 254, 0.5)',
-              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.15)'
+              textShadow: '0 0 8px rgba(0, 242, 254, 0.4)',
+              boxShadow: '0 4px 12px rgba(0, 242, 254, 0.12)'
             } : {
               background: 'transparent',
-              color: 'var(--text-secondary)'
+              border: 'none !important',
+              color: '#64748b'
             }"
             @click="checkoutPaymentMethod = 'card'"
           >
-            <i class="fa-solid fa-credit-card" style="font-size: 1.05rem;"></i>
+            <i class="fa-solid fa-credit-card" style="font-size: 1rem;"></i>
             Cartão de Crédito
           </button>
         </div>
