@@ -731,6 +731,37 @@ let eventSource = null;
 let pollInterval = null;
 
 onMounted(() => {
+  // Initialize dark/light mode
+  if (localStorage.getItem('vagasync_dark_mode') === 'false') {
+    document.documentElement.classList.add('light-mode');
+  } else {
+    document.documentElement.classList.remove('light-mode');
+  }
+
+  // Handle URL payment callbacks from Mercado Pago
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentStatus = urlParams.get('payment') || urlParams.get('status');
+  if (paymentStatus === 'success' || paymentStatus === 'approved') {
+    const planPaid = urlParams.get('plan_id') || 'candidate_premium';
+    if (planPaid === 'candidate_premium') {
+      userFeatures.value.ia_ilimitada = true;
+      localStorage.setItem('vagasync_premium', 'true');
+    } else if (planPaid === 'recruiter_pro') {
+      userFeatures.value.ia_triagem = true;
+      userFeatures.value.videoentrevistas = true;
+      localStorage.setItem('vagasync_recruiter_pro', 'true');
+    } else if (planPaid === 'impulsionar_vaga') {
+      userFeatures.value.impulsionar_vaga_credits = (userFeatures.value.impulsionar_vaga_credits || 0) + 1;
+    } else if (userFeatures.value[planPaid] !== undefined) {
+      userFeatures.value[planPaid] = true;
+    }
+    showToast('Assinatura Confirmada! 💳', 'Seu plano/serviço foi ativado com sucesso e segurança no Mercado Pago.', 'success');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (paymentStatus === 'failure' || paymentStatus === 'rejected') {
+    showToast('Falha no Pagamento', 'A transação não pôde ser concluída. Tente novamente ou use outra forma de pagamento.', 'error');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   handleLinkedinCallback();
 
   if (isLoggedIn.value) {
@@ -1326,31 +1357,40 @@ const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') 
   checkoutOpen.value = true;
 };
 
-const handleCheckoutPayment = () => {
-  if (checkoutPaymentMethod.value === 'card') {
-    if (!checkoutCard.value.number || !checkoutCard.value.name) {
-      showToast('Campos Vazios', 'Preencha os dados do cartão para concluir.', 'error');
-      return;
-    }
-  }
+const handleCheckoutPayment = async () => {
+  const userEmail = profileData.value.email || localStorage.getItem('vagasync_profile_email') || 'candidato@vagasync.com.br';
   
-  if (checkoutPlan.value === 'candidate_premium') {
-    userFeatures.value.ia_ilimitada = true;
-    localStorage.setItem('vagasync_premium', 'true');
-    showToast('Plano Premium Ativado!', 'Parabéns! Você agora tem acesso ilimitado aos recursos de IA.', 'success');
-  } else if (checkoutPlan.value === 'recruiter_pro') {
-    userFeatures.value.ia_triagem = true;
-    userFeatures.value.videoentrevistas = true;
-    localStorage.setItem('vagasync_recruiter_pro', 'true');
-    showToast('Plano Recrutador Pro Ativado!', 'Parabéns! Suas ferramentas de recrutamento ilimitadas e Meet foram liberados.', 'success');
-  } else if (checkoutPlan.value === 'impulsionar_vaga') {
-    userFeatures.value.impulsionar_vaga_credits += 1;
-    showToast('Crédito Adicionado!', 'Parabéns! Você adquiriu 1 crédito para impulsionar vaga.', 'success');
-  } else if (checkoutPlan.value) {
-    userFeatures.value[checkoutPlan.value] = true;
-    showToast('Recurso Ativado!', `Parabéns! O recurso "${checkoutTitle.value}" foi liberado com sucesso.`, 'success');
+  if (checkoutPaymentMethod.value === 'card') {
+    try {
+      showToast('Processando...', 'Conectando ao Mercado Pago de forma segura...', 'info');
+      const response = await fetch(`${API_BASE}/payments/create-preference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_id: checkoutPlan.value,
+          user_email: userEmail
+        })
+      });
+      if (!response.ok) {
+        throw new Error('Falha ao gerar preferência');
+      }
+      const data = await response.json();
+      if (data.checkout_url) {
+        showToast('Redirecionando...', 'Redirecionando para o ambiente de pagamento seguro...', 'success');
+        setTimeout(() => {
+          window.location.href = data.checkout_url;
+        }, 1200);
+      } else {
+        showToast('Erro de Pagamento', 'Não foi possível gerar a página de checkout seguro.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Erro de Conexão', 'Erro ao processar com o Mercado Pago. Tente novamente mais tarde.', 'error');
+    }
+  } else {
+    // Pix: display the locally generated QR Code and wait for approval
+    showToast('Pix Gerado!', 'Utilize o QR Code ou copie o código Pix abaixo para pagar.', 'success');
   }
-  checkoutOpen.value = false;
 };
 
 const cancelPremium = (plan) => {
@@ -2635,26 +2675,17 @@ const restoreCandidate = () => {
         </div>
 
         <!-- Card Area -->
-        <div v-else style="display: flex; flex-direction: column; gap: 0.9rem;">
-          <div class="form-group" style="margin: 0;">
-            <label>Número do Cartão</label>
-            <input type="text" class="form-input" v-model="checkoutCard.number" placeholder="4532 7182 9182 0019" />
-          </div>
-          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.5rem;">
-            <div class="form-group" style="margin: 0;">
-              <label>Nome no Cartão</label>
-              <input type="text" class="form-input" v-model="checkoutCard.name" placeholder="RICARDO SANTOS" />
-            </div>
-            <div class="form-group" style="margin: 0;">
-              <label>CVC</label>
-              <input type="text" class="form-input" placeholder="123" />
-            </div>
-          </div>
+        <div v-else style="display: flex; flex-direction: column; gap: 1rem; background: rgba(59, 130, 246, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.2); text-align: center; align-items: center;">
+          <i class="fa-solid fa-shield-halved" style="font-size: 2rem; color: #00f2fe; margin-bottom: 0.2rem; filter: drop-shadow(0 0 10px rgba(0, 242, 254, 0.3));"></i>
+          <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Pagamento 100% Seguro & Criptografado</span>
+          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin: 0;">
+            Seus dados são protegidos por criptografia SSL de ponta a ponta. Você será redirecionado para a plataforma oficial do Mercado Pago para inserir os dados do seu cartão com segurança total.
+          </p>
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-primary" style="flex: 1;" @click="handleCheckoutPayment">
-            Concluir Pagamento (Simulação)
+            {{ checkoutPaymentMethod === 'card' ? 'Ir para Pagamento Seguro 🔒' : 'Confirmar Pagamento' }}
           </button>
           <button type="button" class="btn btn-secondary" style="flex: 1;" @click="checkoutOpen = false">
             Voltar
@@ -6163,37 +6194,27 @@ const restoreCandidate = () => {
 
             <!-- Modal para Alterar Cartão (Netflix-style overlay) -->
             <div v-if="showChangeCardModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(5, 7, 15, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 9999;">
-              <div class="glass-card" style="width: 100%; max-width: 420px; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem;">
+              <div class="glass-card" style="width: 100%; max-width: 440px; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; border: 1px solid rgba(59, 130, 246, 0.3);">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Alterar Cartão de Pagamento</h3>
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-shield-halved" style="color: #00f2fe;"></i> Alterar Cartão de Pagamento
+                  </h3>
                   <button type="button" @click="showChangeCardModal = false" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.5rem; line-height: 1;">&times;</button>
                 </div>
                 
-                <form @submit.prevent="saveCardData" style="display: flex; flex-direction: column; gap: 1.25rem;">
-                  <div class="form-group" style="margin: 0;">
-                    <label>Número do Cartão</label>
-                    <input type="text" class="form-input" v-model="changeCardForm.number" placeholder="4532 1122 3344 8899" required />
-                  </div>
-                  <div class="form-group" style="margin: 0;">
-                    <label>Nome do Titular</label>
-                    <input type="text" class="form-input" v-model="changeCardForm.name" placeholder="FATE CANDIDATE" required />
-                  </div>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="form-group" style="margin: 0;">
-                      <label>Validade</label>
-                      <input type="text" class="form-input" v-model="changeCardForm.expiry" placeholder="MM/AA" required />
-                    </div>
-                    <div class="form-group" style="margin: 0;">
-                      <label>CVV</label>
-                      <input type="password" class="form-input" v-model="changeCardForm.cvv" placeholder="123" required />
-                    </div>
-                  </div>
-                  
-                  <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem;">
-                    <button type="button" class="btn btn-secondary" @click="showChangeCardModal = false">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Salvar Cartão</button>
-                  </div>
-                </form>
+                <div style="display: flex; flex-direction: column; gap: 1rem; text-align: center; align-items: center;">
+                  <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                    Por conformidade com os padrões de segurança PCI-DSS e proteção à LGPD, o VagaSync não coleta nem armazena as credenciais completas do seu cartão de crédito.
+                  </p>
+                  <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin: 0;">
+                    Ao clicar no botão abaixo, você abrirá o portal seguro do **Mercado Pago** para atualizar ou reautorizar seu cartão com criptografia de ponta a ponta.
+                  </p>
+                </div>
+                
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem;">
+                  <button type="button" class="btn btn-secondary" @click="showChangeCardModal = false">Voltar</button>
+                  <button type="button" class="btn btn-primary" @click="() => { showChangeCardModal = false; openCheckout('candidate_premium', 'Atualizar Assinatura', 'R$ 9,90/mês'); }">Abrir Checkout Seguro 🔒</button>
+                </div>
               </div>
             </div>
 
