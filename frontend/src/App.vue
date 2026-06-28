@@ -25,7 +25,9 @@ import JobMap from './JobMap.vue';
 import ContatoRH from './ContatoRH.vue';
 import Messenger from './Messenger.vue';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8000/api'
+  : '/api';
 
 // Config state
 const config = ref({
@@ -649,7 +651,7 @@ onMounted(() => {
   checkAutomationStatus();
 
   // Setup Server-Sent Events for real-time logs
-  eventSource = new EventSource('http://localhost:8000/api/automation/events');
+  eventSource = new EventSource(`${API_BASE}/automation/events`);
   eventSource.onmessage = (event) => {
     try {
       const logData = JSON.parse(event.data);
