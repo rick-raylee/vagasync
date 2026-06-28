@@ -3067,9 +3067,12 @@ const restoreCandidate = () => {
               <img 
                 :src="pixGeneratedData.qrCode" 
                 alt="QR Code Pix Oficial" 
-                style="width: 160px; height: 160px; display: block; object-fit: contain;" 
+                style="width: 220px; height: 220px; display: block; object-fit: contain;" 
               />
             </div>
+            <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 0.25rem 0; line-height: 1.3;">
+              Dica: Se a câmera do celular tiver dificuldades para escanear, copie o código <b>Copia e Cola</b> abaixo e cole-o diretamente no app do seu banco!
+            </p>
             
             <button 
               type="button" 
