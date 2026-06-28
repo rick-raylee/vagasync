@@ -6517,7 +6517,6 @@ const restoreCandidate = () => {
 
                   <!-- Pix Active Billing Panel (Mostra em baixo sem precisar clicar) -->
                   <div 
-                    v-if="transactionHistory.length > 0 && (transactionHistory[0].payment_method === 'pix' || transactionHistory[0].payment_method === 'pix_fallback')"
                     style="margin-top: 1.5rem; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; gap: 1.5rem;"
                   >
                     <div style="background: white; padding: 0.5rem; border-radius: 8px; display: flex; justify-content: center; align-items: center; width: 110px; height: 110px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
