@@ -2922,7 +2922,7 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'dashboard' }]"
             @click="activeTab = 'dashboard'"
           >
-            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Principal
+            <i class="fa-solid fa-briefcase" style="font-size: 13px; color: #3b82f6;"></i> Painel Principal
           </button>
           
           <button 
@@ -2930,7 +2930,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'map'"
             style="position: relative;"
           >
-            <img src="/icons/3d/map.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mapa de Vagas
+            <i class="fa-solid fa-map-location-dot" style="font-size: 13px; color: #10b981;"></i> Mapa de Vagas
             <span v-if="jobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2946,7 +2946,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'contato'"
             style="position: relative;"
           >
-            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Contato com RH
+            <i class="fa-solid fa-address-card" style="font-size: 13px; color: #ec4899;"></i> Contato com RH
             <span v-if="stats.applied > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2962,7 +2962,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mensagens
+            <i class="fa-solid fa-comment-dots" style="font-size: 13px; color: #00f2fe;"></i> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2977,35 +2977,35 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'resume' }]"
             @click="activeTab = 'resume'"
           >
-            <img src="/icons/3d/signup.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Currículo & Perfil IA
+            <i class="fa-solid fa-file-invoice" style="font-size: 13px; color: #fbbf24;"></i> Currículo & Perfil IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'career' }]"
             @click="activeTab = 'career'"
           >
-            <img src="/icons/3d/star.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Copiloto IA
+            <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px; color: #a855f7;"></i> Copiloto IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'interview' }]"
             @click="activeTab = 'interview'"
           >
-            <img src="/icons/3d/clock.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Treino Entrevista
+            <i class="fa-solid fa-microphone-lines" style="font-size: 13px; color: #f43f5e;"></i> Treino Entrevista
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
             @click="activeTab = 'community_feed'; fetchFeed();"
           >
-            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Feed Comunidade
+            <i class="fa-solid fa-users" style="font-size: 13px; color: #fb923c;"></i> Feed Comunidade
           </button>
           
           <button 
             :class="['nav-link-btn', { active: activeTab === 'config' }]"
             @click="activeTab = 'config'"
           >
-            <img src="/icons/3d/security.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Configurações
+            <i class="fa-solid fa-sliders" style="font-size: 13px; color: #94a3b8;"></i> Configurações
           </button>
         </nav>
 
@@ -3014,14 +3014,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_dashboard' }]"
             @click="activeTab = 'recruiter_dashboard'"
           >
-            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Recrutador
+            <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> Painel Recrutador
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'recruiter_jobs' }]"
             @click="activeTab = 'recruiter_jobs'"
           >
-            <img src="/icons/3d/deploy.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Criar Vaga
+            <i class="fa-solid fa-circle-plus" style="font-size: 13px; color: #10b981;"></i> Criar Vaga
           </button>
 
           <button 
@@ -3029,7 +3029,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mensagens
+            <i class="fa-solid fa-comment-dots" style="font-size: 13px; color: #00f2fe;"></i> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -3044,14 +3044,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_billing' }]"
             @click="activeTab = 'recruiter_billing'"
           >
-            <img src="/icons/3d/store.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Faturamento SaaS
+            <i class="fa-solid fa-wallet" style="font-size: 13px; color: #eab308;"></i> Faturamento SaaS
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
             @click="activeTab = 'community_feed'; fetchFeed();"
           >
-            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Feed Comunidade
+            <i class="fa-solid fa-users" style="font-size: 13px; color: #fb923c;"></i> Feed Comunidade
           </button>
         </nav>
 
@@ -3060,37 +3060,37 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'super_admin' }]"
             @click="activeTab = 'super_admin'"
           >
-            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Global
+            <i class="fa-solid fa-earth-americas" style="font-size: 13px; color: #3b82f6;"></i> Painel Global
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_monetization' }]"
             @click="activeTab = 'super_admin_monetization'"
           >
-            <img src="/icons/3d/value.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Monetização
+            <i class="fa-solid fa-scale-balanced" style="font-size: 13px; color: #10b981;"></i> Monetização
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_gateways' }]"
             @click="activeTab = 'super_admin_gateways'"
           >
-            <img src="/icons/3d/store.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Gateways
+            <i class="fa-solid fa-credit-card" style="font-size: 13px; color: #a855f7;"></i> Gateways
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_tracking' }]"
             @click="activeTab = 'super_admin_tracking'"
           >
-            <img src="/icons/3d/map.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Rastreamento
+            <i class="fa-solid fa-magnifying-glass-location" style="font-size: 13px; color: #00f2fe;"></i> Rastreamento
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_content' }]"
             @click="activeTab = 'super_admin_content'"
           >
-            <img src="/icons/3d/dev.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Conteúdo
+            <i class="fa-solid fa-newspaper" style="font-size: 13px; color: #fb923c;"></i> Conteúdo
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_security' }]"
             @click="activeTab = 'super_admin_security'"
           >
-            <img src="/icons/3d/security.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Segurança
+            <i class="fa-solid fa-shield-halved" style="font-size: 13px; color: #ef4444;"></i> Segurança
           </button>
         </nav>
         

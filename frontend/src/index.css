@@ -19,9 +19,9 @@
   --color-warning: #f59e0b; /* Amber */
   --color-error: #ef4444; /* Rose */
   
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #ffffff;
+  --text-secondary: #e2e8f0; /* Slate 200 - alta legibilidade e contraste */
+  --text-muted: #94a3b8;     /* Slate 400 - tom suave legível para secundários */
   
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -90,28 +90,88 @@ h1, h2, h3, h4 {
 
 /* Layout */
 .app-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 2rem 1.5rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 1.5rem 2.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-/* Header & Unified Navigation Bar */
+/* Header & Unified Navigation Bar — Two-row layout */
 .header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2.5rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(10, 15, 28, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0;
+  flex-direction: column;
+  margin-bottom: 2rem;
+  background: rgba(10, 15, 28, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   position: sticky;
   top: 0;
   z-index: 9999;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  box-sizing: border-box;
 }
+
+.header-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.header-nav-row {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.header-nav-row::-webkit-scrollbar { display: none; }
+
+.nav-tabs-full {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: max-content;
+}
+
+.nav-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 0.65rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  position: relative;
+  letter-spacing: -0.01em;
+}
+
+.nav-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(59, 130, 246, 0.3);
+}
+
+.nav-tab.active {
+  color: #ffffff;
+  background: rgba(59, 130, 246, 0.08);
+  border-bottom-color: var(--color-primary);
+}
+
+
 
 .logo-container {
   display: flex;
@@ -122,19 +182,20 @@ h1, h2, h3, h4 {
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.2rem;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.5rem 0;
+  padding: 0.3rem 0;
   scroll-behavior: smooth;
   flex: 1;
-  margin: 0 1.5rem;
-  /* Hide scrollbar */
+  min-width: 0;
+  margin: 0 0.75rem;
+  /* Remove mask-image completely — no visual clipping */
+  mask-image: none;
+  -webkit-mask-image: none;
+  /* Hide scrollbar but keep scroll */
   -ms-overflow-style: none;
   scrollbar-width: none;
-  /* Smooth fade at the edges so it doesn't look like a hard cut */
-  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
-  mask-image: linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent);
 }
 .nav-menu::-webkit-scrollbar {
   display: none;
@@ -146,8 +207,8 @@ h1, h2, h3, h4 {
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 0.85rem;
-  padding: 0.6rem 1.1rem;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
   border-radius: 30px;
@@ -155,7 +216,8 @@ h1, h2, h3, h4 {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
+  letter-spacing: -0.01em;
 }
 
 .nav-link-btn:hover {
@@ -171,20 +233,21 @@ h1, h2, h3, h4 {
 }
 
 .logo-icon-img {
-  width: 42px;
-  height: 42px;
-  object-fit: cover;
-  border-radius: 50%;
-  border: 2px solid var(--color-primary);
-  box-shadow: 0 0 15px var(--color-primary-glow);
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: none;
+  box-shadow: none;
 }
 
 .logo-text {
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   font-family: var(--font-display);
   background: linear-gradient(135deg, var(--text-primary) 30%, var(--color-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  white-space: nowrap;
 }
 
 .agent-badge {
@@ -359,8 +422,8 @@ h1, h2, h3, h4 {
 
 .form-input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-color);
+  background: rgba(8, 12, 24, 0.85); /* Fundo escuro e opaco para destacar o texto digitado */
+  border: 1px solid rgba(255, 255, 255, 0.12); /* Borda mais nítida */
   border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
   color: var(--text-primary);
@@ -370,9 +433,9 @@ h1, h2, h3, h4 {
 
 .form-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-glow);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--color-secondary); /* Destaque em Neon Cyan */
+  box-shadow: 0 0 0 2px rgba(0, 242, 254, 0.15);
+  background: rgba(8, 12, 24, 0.95);
 }
 
 /* Skills Badges */
@@ -2145,7 +2208,7 @@ h1, h2, h3, h4 {
   gap: 1.25rem;
   transition: var(--transition-smooth);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .pricing-card:hover {
