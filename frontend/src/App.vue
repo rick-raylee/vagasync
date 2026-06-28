@@ -3064,22 +3064,81 @@ const restoreCandidate = () => {
           Ative agora este recurso por apenas {{ checkoutPrice }}
         </p>
 
-        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+        <!-- PREMIUM TAB SWITCHER (Pix vs Card) -->
+        <div style="
+          display: flex; 
+          background: rgba(10, 15, 28, 0.8); 
+          padding: 4px; 
+          border-radius: 12px; 
+          border: 1px solid rgba(255, 255, 255, 0.08); 
+          gap: 6px; 
+          margin-bottom: 1.5rem;
+          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+        ">
+          <!-- Pix Tab Button -->
           <button 
             type="button" 
-            :class="['btn', checkoutPaymentMethod === 'pix' ? 'btn-primary' : 'btn-secondary']"
-            style="flex: 1; padding: 0.5rem;"
+            style="
+              flex: 1; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              gap: 8px; 
+              padding: 0.7rem; 
+              font-size: 0.85rem; 
+              font-weight: 700;
+              border-radius: 9px; 
+              cursor: pointer;
+              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              border: 1px solid transparent;
+            "
+            :style="checkoutPaymentMethod === 'pix' ? {
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(0, 242, 254, 0.25))',
+              border: '1px solid rgba(0, 242, 254, 0.4)',
+              color: '#00f2fe',
+              textShadow: '0 0 10px rgba(0, 242, 254, 0.5)',
+              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.15)'
+            } : {
+              background: 'transparent',
+              color: 'var(--text-secondary)'
+            }"
             @click="checkoutPaymentMethod = 'pix'"
           >
-            <i class="fa-solid fa-pix" style="margin-right: 4px;"></i> Pix Instantâneo
+            <i class="fa-solid fa-pix" style="font-size: 1.1rem; filter: drop-shadow(0 0 5px rgba(0,242,254,0.3));"></i>
+            Pix Instantâneo
           </button>
+          
+          <!-- Card Tab Button -->
           <button 
             type="button" 
-            :class="['btn', checkoutPaymentMethod === 'card' ? 'btn-primary' : 'btn-secondary']"
-            style="flex: 1; padding: 0.5rem;"
+            style="
+              flex: 1; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              gap: 8px; 
+              padding: 0.7rem; 
+              font-size: 0.85rem; 
+              font-weight: 700;
+              border-radius: 9px; 
+              cursor: pointer;
+              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              border: 1px solid transparent;
+            "
+            :style="checkoutPaymentMethod === 'card' ? {
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(0, 242, 254, 0.25))',
+              border: '1px solid rgba(0, 242, 254, 0.4)',
+              color: '#00f2fe',
+              textShadow: '0 0 10px rgba(0, 242, 254, 0.5)',
+              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.15)'
+            } : {
+              background: 'transparent',
+              color: 'var(--text-secondary)'
+            }"
             @click="checkoutPaymentMethod = 'card'"
           >
-            <i class="fa-solid fa-credit-card" style="margin-right: 4px;"></i> Cartão de Crédito
+            <i class="fa-solid fa-credit-card" style="font-size: 1.05rem;"></i>
+            Cartão de Crédito
           </button>
         </div>
 
