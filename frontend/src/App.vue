@@ -1400,6 +1400,11 @@ const copyPixCopiaECola = () => {
   showToast('Copiado', 'Código Pix Copia e Cola copiado com sucesso!', 'success');
 };
 
+const copyToClipboard = (text, title = 'Copiado', message = 'Copiado para a área de transferência!') => {
+  navigator.clipboard.writeText(text);
+  showToast(title, message, 'success');
+};
+
 const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') => {
   checkoutPlan.value = plan;
   checkoutTitle.value = title;
@@ -6455,8 +6460,37 @@ const restoreCandidate = () => {
                       </div>
                     </div>
                     
+                    <!-- Pix Card (Netflix Style) -->
+                    <div 
+                      v-if="transactionHistory.length > 0 && (transactionHistory[0].payment_method === 'pix' || transactionHistory[0].payment_method === 'pix_fallback')"
+                      style="background: linear-gradient(135deg, #0f172a 0%, #020617 100%); border: 1px solid rgba(0, 242, 254, 0.25); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,242,254,0.1); height: 160px;"
+                    >
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <span style="font-weight: 800; color: #00f2fe; font-size: 0.95rem; letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px;">
+                          <i class="fa-solid fa-pix"></i> PIX
+                        </span>
+                        <span style="font-size: 0.65rem; color: #34d399; font-weight: 700; background: rgba(52,211,153,0.1); padding: 2px 6px; border-radius: 4px;">CONECTADO</span>
+                      </div>
+                      
+                      <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin: 0.5rem 0;">
+                        Chave Pix: <strong style="color: #fff;">{{ config.pix_key || '109.472.439-41' }}</strong>
+                      </div>
+                      
+                      <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 0.68rem; color: var(--text-muted);">Ricardo Marchi</div>
+                        <button 
+                          type="button" 
+                          class="btn btn-secondary" 
+                          style="font-size: 0.72rem; padding: 0.35rem 0.7rem; border-color: rgba(0, 242, 254, 0.3); background: rgba(0, 242, 254, 0.05); color: #00f2fe;"
+                          @click="copyToClipboard(config.pix_key || '109.472.439-41', 'Chave Copiada', 'Chave Pix copiada com sucesso!')"
+                        >
+                          Copiar Chave
+                        </button>
+                      </div>
+                    </div>
+
                     <!-- Cartão Netflix Style -->
-                    <div style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
+                    <div v-else style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
                       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <span style="font-weight: 700; color: #3b82f6; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;">{{ cardBrand }}</span>
                         <i class="fa-solid fa-signal" style="color: rgba(255,255,255,0.2); font-size: 0.9rem;"></i>
@@ -6477,6 +6511,44 @@ const restoreCandidate = () => {
                         >
                           Alterar Cartão
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Pix Active Billing Panel (Mostra em baixo sem precisar clicar) -->
+                  <div 
+                    v-if="transactionHistory.length > 0 && (transactionHistory[0].payment_method === 'pix' || transactionHistory[0].payment_method === 'pix_fallback')"
+                    style="margin-top: 1.5rem; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; gap: 1.5rem;"
+                  >
+                    <div style="background: white; padding: 0.5rem; border-radius: 8px; display: flex; justify-content: center; align-items: center; width: 110px; height: 110px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
+                      <img 
+                        :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(generatePixPayload(config.pix_key || '109.472.439-41', 9.90))}`" 
+                        alt="QR Code Pix"
+                        style="width: 95px; height: 95px; object-fit: contain;"
+                      />
+                    </div>
+                    
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.35rem;">
+                      <span style="font-size: 0.85rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-pix" style="color: #00f2fe;"></i> Dados para Pagamento e Renovação Pix
+                      </span>
+                      <p style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+                        Use o QR Code ao lado ou copie o código Pix Copia e Cola para realizar o pagamento ou renovação mensal do seu plano.
+                      </p>
+                      
+                      <div style="display: flex; gap: 12px; align-items: center; margin-top: 0.25rem; flex-wrap: wrap;">
+                        <button 
+                          type="button"
+                          class="btn btn-secondary" 
+                          style="font-size: 0.72rem; padding: 0.3rem 0.6rem; display: inline-flex; align-items: center; gap: 4px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.05); color: #34d399;"
+                          @click="copyToClipboard(generatePixPayload(config.pix_key || '109.472.439-41', 9.90), 'Código Copiado', 'Código Pix Copia e Cola copiado com sucesso!')"
+                        >
+                          <i class="fa-solid fa-copy"></i> Copiar Pix Copia e Cola
+                        </button>
+                        
+                        <div style="font-size: 0.74rem; color: var(--text-muted);">
+                          Chave CPF: <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 2px 6px; border-radius: 4px;">{{ config.pix_key || '109.472.439-41' }}</code>
+                        </div>
                       </div>
                     </div>
                   </div>
