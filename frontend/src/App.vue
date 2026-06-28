@@ -98,6 +98,109 @@ const activeCommentsPostId = ref(null);
 
 const activeConfigSubTab = ref('profile');
 
+// ── Dynamic Settings States (Netflix-style) ──
+const activeSettingsTab = ref('billing');
+const cardBrand = ref(localStorage.getItem('vagasync_card_brand') || 'Visa');
+const cardLast4 = ref(localStorage.getItem('vagasync_card_last4') || '8899');
+const cardExpiry = ref(localStorage.getItem('vagasync_card_expiry') || '12/28');
+const showChangeCardModal = ref(false);
+
+const changeCardForm = ref({
+  number: '',
+  name: '',
+  expiry: '',
+  cvv: ''
+});
+
+const securityData = ref({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+  twoFactorEnabled: localStorage.getItem('vagasync_2fa_enabled') === 'true'
+});
+
+const privacyData = ref({
+  profileVisibleToRecruiters: localStorage.getItem('vagasync_privacy_visible') !== 'false',
+  allowTargetedAds: localStorage.getItem('vagasync_privacy_ads') === 'true',
+  cookieConsent: localStorage.getItem('vagasync_cookie_consent') === 'true'
+});
+
+
+
+// Mock login history for Access & Security tab
+const loginHistory = ref([
+  { device: 'Windows 11 PC - Google Chrome', location: 'São Paulo, SP - Brasil', ip: '200.234.212.34', date: 'Hoje às 22:30' },
+  { device: 'iPhone 15 - Safari', location: 'São Paulo, SP - Brasil', ip: '189.120.45.10', date: 'Ontem às 14:15' }
+]);
+
+const saveCardData = () => {
+  if (!changeCardForm.value.number || !changeCardForm.value.expiry) {
+    showToast('Erro', 'Por favor, preencha os dados do cartão.', 'error');
+    return;
+  }
+  const last4 = changeCardForm.value.number.slice(-4);
+  cardLast4.value = last4;
+  cardExpiry.value = changeCardForm.value.expiry;
+  
+  if (changeCardForm.value.number.startsWith('5')) cardBrand.value = 'Mastercard';
+  else if (changeCardForm.value.number.startsWith('4')) cardBrand.value = 'Visa';
+  else cardBrand.value = 'Elo';
+
+  localStorage.setItem('vagasync_card_brand', cardBrand.value);
+  localStorage.setItem('vagasync_card_last4', cardLast4.value);
+  localStorage.setItem('vagasync_card_expiry', cardExpiry.value);
+  
+  showToast('Cartão Atualizado!', 'Os dados do seu cartão de pagamento foram salvos.', 'success');
+  showChangeCardModal.value = false;
+};
+
+const updateSecuritySettings = () => {
+  if (securityData.value.newPassword) {
+    if (securityData.value.newPassword !== securityData.value.confirmPassword) {
+      showToast('Erro', 'A nova senha e a confirmação não conferem.', 'error');
+      return;
+    }
+    showToast('Senha Alterada!', 'Sua senha foi atualizada.', 'success');
+    securityData.value.currentPassword = '';
+    securityData.value.newPassword = '';
+    securityData.value.confirmPassword = '';
+  }
+  localStorage.setItem('vagasync_2fa_enabled', securityData.value.twoFactorEnabled ? 'true' : 'false');
+  showToast('Segurança Salva!', 'As configurações foram salvas.', 'success');
+};
+
+const updatePrivacySettings = () => {
+  localStorage.setItem('vagasync_privacy_visible', privacyData.value.profileVisibleToRecruiters ? 'true' : 'false');
+  localStorage.setItem('vagasync_privacy_ads', privacyData.value.allowTargetedAds ? 'true' : 'false');
+  localStorage.setItem('vagasync_cookie_consent', privacyData.value.cookieConsent ? 'true' : 'false');
+  showToast('Privacidade Salva!', 'Suas preferências de privacidade foram atualizadas.', 'success');
+};
+
+const updateNotificationSettings = () => {
+  localStorage.setItem('vagasync_notify_email', notificationSettings.value.notifyEmail ? 'true' : 'false');
+  localStorage.setItem('vagasync_notify_whatsapp', notificationSettings.value.notifyWhatsApp ? 'true' : 'false');
+  localStorage.setItem('vagasync_notify_telegram', notificationSettings.value.notifyTelegram ? 'true' : 'false');
+  localStorage.setItem('vagasync_notify_newsletter', notificationSettings.value.newsletterEnabled ? 'true' : 'false');
+  showToast('Notificações Salvas!', 'Preferências de alertas salvas.', 'success');
+};
+
+// Profile Photo Upload
+const handleProfilePhotoUpload = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Erro', 'O tamanho máximo da foto é 2MB.', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    profileData.value.photo = reader.result;
+    localStorage.setItem('vagasync_profile_photo', reader.result);
+    showToast('Foto Carregada!', 'Sua foto de perfil foi atualizada.', 'success');
+  };
+  reader.readAsDataURL(file);
+};
+
 // ── Profile and System Settings States ──
 const profileData = ref({
   name: localStorage.getItem('vagasync_profile_name') || '',
@@ -123,20 +226,7 @@ const saveProfileData = () => {
   showToast('Perfil Atualizado!', 'Suas informações de perfil foram salvas com sucesso.', 'success');
 };
 
-const handleProfilePhotoUpload = (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Erro de Arquivo', 'A foto de perfil deve ter no máximo 2MB.', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      profileData.value.photo = reader.result;
-    };
-    reader.readAsDataURL(file);
-  }
-};
+
 
 const toggleDarkMode = () => {
   localStorage.setItem('vagasync_dark_mode', darkMode.value);
@@ -300,7 +390,11 @@ const notificationSettings = ref({
   enabled: localStorage.getItem('vagasync_notifications_enabled') === 'true' ? true : false,
   onApplications: localStorage.getItem('vagasync_notify_applications') === 'true' ? true : false,
   onRecruiterContact: localStorage.getItem('vagasync_notify_recruiter') === 'true' ? true : false,
-  onSearchResults: localStorage.getItem('vagasync_notify_search') === 'true' ? true : false
+  onSearchResults: localStorage.getItem('vagasync_notify_search') === 'true' ? true : false,
+  notifyEmail: localStorage.getItem('vagasync_notify_email') !== 'false',
+  notifyWhatsApp: localStorage.getItem('vagasync_notify_whatsapp') !== 'false',
+  notifyTelegram: localStorage.getItem('vagasync_notify_telegram') === 'true',
+  newsletterEnabled: localStorage.getItem('vagasync_notify_newsletter') !== 'false'
 });
 
 const saveNotificationSettings = () => {
@@ -5361,591 +5455,746 @@ const restoreCandidate = () => {
         
         <!-- ── Aba Configurações ── -->
         <template v-if="activeTab === 'config'">
-          <div style="max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+          <div style="display: grid; grid-template-columns: 260px 1fr; gap: 2rem; align-items: start; max-width: 1100px; margin: 0 auto;">
             
-            <!-- Seleção de Sub-abas (Perfil vs. Automação) -->
-            <div style="display: flex; gap: 0.5rem; background: rgba(5, 7, 15, 0.4); padding: 4px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <!-- Sidebar de Configurações -->
+            <div class="glass-card" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.35rem; position: sticky; top: 2rem;">
+              <div style="padding: 0.5rem 0.75rem; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+                Configurações
+              </div>
+              
               <button 
                 type="button" 
-                class="nav-link-btn" 
-                style="flex: 1; text-align: center; justify-content: center; font-size: 0.85rem;"
-                :class="{ active: activeConfigSubTab === 'profile' }"
-                @click="activeConfigSubTab = 'profile'"
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'billing' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'billing'"
               >
-                👤 Meus Dados & Sistema
+                <i class="fa-solid fa-credit-card"></i> Assinatura & Plano
               </button>
+
               <button 
                 type="button" 
-                class="nav-link-btn" 
-                style="flex: 1; text-align: center; justify-content: center; font-size: 0.85rem;"
-                :class="{ active: activeConfigSubTab === 'automation' }"
-                @click="activeConfigSubTab = 'automation'"
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'profile' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'profile'"
               >
-                ⚙️ Automação & Busca
+                <i class="fa-solid fa-user"></i> Meu Perfil & Foto
+              </button>
+
+              <button 
+                type="button" 
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'security' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'security'"
+              >
+                <i class="fa-solid fa-lock"></i> Acesso & Segurança
+              </button>
+
+              <button 
+                type="button" 
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'privacy' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'privacy'"
+              >
+                <i class="fa-solid fa-shield-halved"></i> Privacidade & LGPD
+              </button>
+
+              <button 
+                type="button" 
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'notifications' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'notifications'"
+              >
+                <i class="fa-solid fa-bell"></i> Notificações Multi-Canal
+              </button>
+
+              <button 
+                type="button" 
+                style="display: flex; align-items: center; gap: 10px; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; text-align: left; cursor: pointer; transition: all 0.2s ease;"
+                :style="activeSettingsTab === 'automation' ? {
+                  background: 'linear-gradient(90deg, rgba(0, 242, 254, 0.08), rgba(59, 130, 246, 0.08))',
+                  borderColor: 'rgba(0, 242, 254, 0.2)',
+                  color: '#00f2fe',
+                  fontWeight: '700'
+                } : {}"
+                @click="activeSettingsTab = 'automation'"
+              >
+                <i class="fa-solid fa-sliders"></i> Automação & Busca
               </button>
             </div>
 
-            <!-- SUB-ABA 1: MEUS DADOS E CONFIGURAÇÕES DO SISTEMA -->
-            <div v-if="activeConfigSubTab === 'profile'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- Conteúdo da Configuração -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
               
-              <!-- Foto de Perfil & Dados Pessoais -->
-              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
-                <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
-                  <i class="fa-solid fa-user-gear" style="color: var(--color-secondary);"></i> Meu Perfil VagaSync
-                </h3>
-
-                <!-- Upload de Foto de Perfil -->
-                <div style="display: flex; align-items: center; gap: 1.5rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); padding: 1rem; border-radius: 12px;">
-                  <!-- Preview -->
-                  <div style="position: relative;">
-                    <div 
-                      style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 3px solid #00f2fe; box-shadow: 0 0 15px rgba(0,242,254,0.3); font-weight: 700; color: #060913; font-size: 2rem;"
+              <!-- 1. TABA: ASSINATURA E PLANO -->
+              <div v-if="activeSettingsTab === 'billing'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="glass-card" style="position: relative; overflow: hidden; border-left: 4px solid var(--color-secondary);">
+                  <div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(0, 242, 254, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+                  
+                  <h3 style="margin: 0 0 1rem 0; font-size: 1.2rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-credit-card" style="color: var(--color-secondary);"></i> Plano & Assinatura Ativa
+                  </h3>
+                  
+                  <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; margin-top: 1rem;">
+                    <div>
+                      <div style="font-size: 1.4rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px;">
+                        Plano IA Avançada
+                        <span style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 20px; background: rgba(0,242,254,0.12); color: #00f2fe; border: 1px solid rgba(0,242,254,0.2);">ATIVO</span>
+                      </div>
+                      <p style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.5;">
+                        Acesso ilimitado ao copiloto de busca de vagas por IA, candidaturas automáticas multi-canal e geocodificação no Radar de Vagas.
+                      </p>
+                      <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted);">
+                        <div><strong>Valor:</strong> R$ 9,90 / mês</div>
+                        <div><strong>Próxima renovação:</strong> 28 de Julho de 2026</div>
+                        <div><strong>Método de pagamento:</strong> Cartão de Crédito</div>
+                      </div>
+                    </div>
+                    
+                    <!-- Cartão Netflix Style -->
+                    <div style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <span style="font-weight: 700; color: #3b82f6; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;">{{ cardBrand }}</span>
+                        <i class="fa-solid fa-signal" style="color: rgba(255,255,255,0.2); font-size: 0.9rem;"></i>
+                      </div>
+                      <div style="font-family: monospace; font-size: 1.1rem; color: #fff; letter-spacing: 0.15em; margin: 1rem 0;">
+                        •••• •••• •••• {{ cardLast4 }}
+                      </div>
+                      <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                          <div style="font-size: 0.6rem; text-transform: uppercase; color: var(--text-muted);">Validade</div>
+                          <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">{{ cardExpiry }}</div>
+                        </div>
+                        <button 
+                          type="button" 
+                          class="btn btn-secondary" 
+                          style="font-size: 0.72rem; padding: 0.35rem 0.7rem; border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);"
+                          @click="showChangeCardModal = true"
+                        >
+                          Alterar Cartão
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style="border-top: 1px solid var(--border-color); margin-top: 1.5rem; padding-top: 1rem; display: flex; justify-content: flex-end;">
+                    <button 
+                      type="button" 
+                      class="btn btn-secondary" 
+                      style="font-size: 0.8rem; color: var(--color-error); border-color: rgba(239, 68, 68, 0.15);"
+                      @click="showToast('Cancelamento', 'Para cancelar seu plano de R$ 9,90/mês, por favor entre em contato com o suporte financeiro.', 'info')"
                     >
-                      <img v-if="profileData.photo" :src="profileData.photo" style="width: 100%; height: 100%; object-fit: cover;" />
-                      <span v-else>{{ profileData.name ? profileData.name.charAt(0).toUpperCase() : 'U' }}</span>
-                    </div>
+                      Cancelar Assinatura
+                    </button>
                   </div>
-                  <!-- Ações da Foto -->
-                  <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-                    <span style="font-size: 0.85rem; font-weight: 600; color: #fff;">Foto de Perfil</span>
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">Suporta JPG, PNG. Tamanho máximo 2MB.</span>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-                      <input 
-                        type="file" 
-                        id="profile_photo_upload_input" 
-                        style="display: none;" 
-                        accept="image/*"
-                        @change="handleProfilePhotoUpload"
-                      />
-                      <button 
-                        type="button" 
-                        class="btn btn-secondary" 
-                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem;" 
-                        @click="document.getElementById('profile_photo_upload_input').click()"
-                      >
-                        Carregar Foto
-                      </button>
-                      <button 
-                        v-if="profileData.photo"
-                        type="button" 
-                        class="btn btn-secondary" 
-                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem; color: var(--color-error); border-color: rgba(239,68,68,0.2);" 
-                        @click="profileData.photo = ''"
-                      >
-                        Remover
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Formulário de dados -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                  <div class="form-group" style="margin: 0;">
-                    <label>Nome Completo</label>
-                    <input type="text" class="form-input" v-model="profileData.name" placeholder="Digite seu nome..." />
-                  </div>
-                  <div class="form-group" style="margin: 0;">
-                    <label>E-mail de Contato</label>
-                    <input type="email" class="form-input" v-model="profileData.email" placeholder="seu@email.com" />
-                  </div>
-                  <div class="form-group" style="margin: 0;">
-                    <label>Telefone de Contato</label>
-                    <input type="text" class="form-input" v-model="profileData.phone" placeholder="+55 (11) 99999-9999" />
-                  </div>
-                  <div class="form-group" style="margin: 0;" v-if="userRole === 'recruiter'">
-                    <label>Nome da Empresa / Organização</label>
-                    <input type="text" class="form-input" v-model="profileData.company" placeholder="Sua Empresa..." />
-                  </div>
-                </div>
-
-                <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
-                  <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveProfileData">
-                    Salvar Dados Cadastrais
-                  </button>
                 </div>
               </div>
 
-              <!-- Tema & Preferências de Sistema -->
-              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
-                <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
-                  <i class="fa-solid fa-sliders" style="color: var(--color-secondary);"></i> Preferências & Sistema
-                </h3>
+              <!-- 2. TABA: MEUS DADOS E FOTO -->
+              <div v-if="activeSettingsTab === 'profile'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-user-gear" style="color: var(--color-secondary);"></i> Meu Perfil VagaSync
+                  </h3>
 
-                <!-- Dark Mode / Tema -->
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
-                  <div>
-                    <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Tema Visual (Escuro vs Claro)</span>
-                    <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Alterna entre o Dark Mode original e o Light Mode de leitura.</p>
+                  <!-- Upload de Foto de Perfil -->
+                  <div style="display: flex; align-items: center; gap: 1.5rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); padding: 1rem; border-radius: 12px;">
+                    <!-- Preview -->
+                    <div style="position: relative;">
+                      <div 
+                        style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 3px solid #00f2fe; box-shadow: 0 0 15px rgba(0,242,254,0.3); font-weight: 700; color: #060913; font-size: 2rem;"
+                      >
+                        <img v-if="profileData.photo" :src="profileData.photo" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <span v-else>{{ profileData.name ? profileData.name.charAt(0).toUpperCase() : 'U' }}</span>
+                      </div>
+                    </div>
+                    <!-- Ações da Foto -->
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
+                      <span style="font-size: 0.85rem; font-weight: 600; color: #fff;">Foto de Perfil</span>
+                      <span style="font-size: 0.72rem; color: var(--text-muted);">Suporta JPG, PNG. Tamanho máximo 2MB.</span>
+                      <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                        <input 
+                          type="file" 
+                          id="profile_photo_upload_input" 
+                          style="display: none;" 
+                          accept="image/*"
+                          @change="handleProfilePhotoUpload"
+                        />
+                        <button 
+                          type="button" 
+                          class="btn btn-secondary" 
+                          style="font-size: 0.75rem; padding: 0.35rem 0.75rem;" 
+                          @click="document.getElementById('profile_photo_upload_input').click()"
+                        >
+                          Carregar Foto
+                        </button>
+                        <button 
+                          v-if="profileData.photo"
+                          type="button" 
+                          class="btn btn-secondary" 
+                          style="font-size: 0.75rem; padding: 0.35rem 0.75rem; color: var(--color-error); border-color: rgba(239,68,68,0.2);" 
+                          @click="profileData.photo = ''"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ darkMode ? 'Dark Mode 🌙' : 'Light Mode ☀️' }}</span>
+
+                  <!-- Formulário de dados -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Nome Completo</label>
+                      <input type="text" class="form-input" v-model="profileData.name" placeholder="Digite seu nome..." />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>E-mail de Contato</label>
+                      <input type="email" class="form-input" v-model="profileData.email" placeholder="seu@email.com" />
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                      <label>Telefone de Contato</label>
+                      <input type="text" class="form-input" v-model="profileData.phone" placeholder="+55 (11) 99999-9999" />
+                    </div>
+                    <div class="form-group" style="margin: 0;" v-if="userRole === 'recruiter'">
+                      <label>Nome da Empresa / Organização</label>
+                      <input type="text" class="form-input" v-model="profileData.company" placeholder="Sua Empresa..." />
+                    </div>
+                  </div>
+
+                  <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                    <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveProfileData">
+                      Salvar Dados Cadastrais
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Tema & Preferências de Sistema -->
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-sliders" style="color: var(--color-secondary);"></i> Preferências & Sistema
+                  </h3>
+
+                  <!-- Dark Mode / Tema -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+                    <div>
+                      <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Tema Visual (Escuro vs Claro)</span>
+                      <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Alterna entre o Dark Mode original e o Light Mode de leitura.</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                      <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ darkMode ? 'Dark Mode 🌙' : 'Light Mode ☀️' }}</span>
+                      <input 
+                        type="checkbox" 
+                        v-model="darkMode" 
+                        @change="toggleDarkMode" 
+                        style="width: 18px; height: 18px; cursor: pointer;"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Configurações Adicionais de Sistema -->
+                  <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="systemSettings.soundEnabled"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔊 Efeitos Sonoros do Copiloto</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Tocar avisos sonoros nas varreduras bem-sucedidas do Agente</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="systemSettings.autoRefresh"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔄 Auto-Atualização do Painel</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Recarregar a lista de vagas automaticamente a cada 5 segundos</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div style="display: flex; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveSystemSettings">
+                      Salvar Preferências
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. TABA: ACESSO E SEGURANÇA -->
+              <div v-if="activeSettingsTab === 'security'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-lock" style="color: var(--color-secondary);"></i> Alterar Senha de Acesso
+                  </h3>
+                  
+                  <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Senha Atual</label>
+                      <input type="password" class="form-input" v-model="securityData.currentPassword" placeholder="Digite sua senha atual..." />
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                      <div class="form-group" style="margin: 0;">
+                        <label>Nova Senha</label>
+                        <input type="password" class="form-input" v-model="securityData.newPassword" placeholder="Mínimo 6 caracteres..." />
+                      </div>
+                      <div class="form-group" style="margin: 0;">
+                        <label>Confirmar Nova Senha</label>
+                        <input type="password" class="form-input" v-model="securityData.confirmPassword" placeholder="Confirme a nova senha..." />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Autenticação de Dois Fatores (2FA) -->
+                  <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem; margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                      <span style="font-weight: 700; font-size: 0.88rem; color: #fff;">Autenticação em Duas Etapas (2FA)</span>
+                      <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Exige um código de segurança enviado ao e-mail/WhatsApp além da senha no login.</p>
+                    </div>
                     <input 
                       type="checkbox" 
-                      v-model="darkMode" 
-                      @change="toggleDarkMode" 
+                      v-model="securityData.twoFactorEnabled" 
                       style="width: 18px; height: 18px; cursor: pointer;"
                     />
                   </div>
+
+                  <div style="display: flex; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="updateSecuritySettings">
+                      Atualizar Segurança
+                    </button>
+                  </div>
                 </div>
 
-                <!-- Configurações Adicionais de Sistema -->
-                <div style="display: flex; flex-direction: column; gap: 0.8rem;">
-                  <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
-                    <input
-                      type="checkbox"
-                      v-model="systemSettings.soundEnabled"
-                      style="width: 16px; height: 16px; cursor: pointer;"
-                    />
-                    <div>
-                      <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔊 Efeitos Sonoros do Copiloto</div>
-                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Tocar avisos sonoros nas varreduras bem-sucedidas do Agente</div>
+                <!-- Histórico de Login -->
+                <div class="glass-card">
+                  <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-clock-rotate-left" style="color: var(--color-secondary);"></i> Histórico de Dispositivos Conectados
+                  </h3>
+                  
+                  <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div 
+                      v-for="(session, i) in loginHistory" :key="i"
+                      style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.8rem;"
+                    >
+                      <div>
+                        <div style="color: #fff; font-weight: 600;">{{ session.device }}</div>
+                        <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 2px;">{{ session.location }} • IP: {{ session.ip }}</div>
+                      </div>
+                      <span style="color: var(--color-success); font-weight: 600; font-size: 0.72rem;">{{ session.date }}</span>
                     </div>
-                  </label>
-
-                  <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
-                    <input
-                      type="checkbox"
-                      v-model="systemSettings.autoRefresh"
-                      style="width: 16px; height: 16px; cursor: pointer;"
-                    />
-                    <div>
-                      <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔄 Auto-Atualização do Painel</div>
-                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Recarregar a lista de vagas automaticamente a cada 5 segundos</div>
-                    </div>
-                  </label>
-                </div>
-
-                <div style="display: flex; justify-content: flex-end;">
-                  <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveSystemSettings">
-                    Salvar Preferências
-                  </button>
+                  </div>
                 </div>
               </div>
 
-              <!-- Privacidade, LGPD & Segurança -->
-              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
-                <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
-                  <i class="fa-solid fa-shield-halved" style="color: var(--color-secondary);"></i> Privacidade & Conformidade (LGPD)
-                </h3>
-                <p style="margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
-                  Em conformidade com a Lei Geral de Proteção de Dados (LGPD), você tem controle total sobre o download de suas informações cadastrais e o direito de ser excluído permanentemente da nossa plataforma de IA.
-                </p>
+              <!-- 4. TABA: PRIVACIDADE E LGPD -->
+              <div v-if="activeSettingsTab === 'privacy'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-shield-halved" style="color: var(--color-secondary);"></i> Preferências de Privacidade
+                  </h3>
 
-                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.25rem;">
-                  <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px;" @click="exportUserData">
-                    <i class="fa-solid fa-download"></i> Exportar Meus Dados (JSON)
-                  </button>
-                  <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px; color: var(--color-error); border-color: rgba(239,68,68,0.2);" @click="deleteAccount">
-                    <i class="fa-solid fa-user-xmark"></i> Excluir Minha Conta (Esquecimento)
-                  </button>
+                  <!-- Visibilidade Recrutadores -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+                    <div>
+                      <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Visibilidade de Perfil</span>
+                      <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Permitir que recrutadores localizem seu currículo e perfil na busca global.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      v-model="privacyData.profileVisibleToRecruiters" 
+                      style="width: 18px; height: 18px; cursor: pointer;"
+                    />
+                  </div>
+
+                  <!-- Dados de Publicidade -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+                    <div>
+                      <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Dados de Publicidade & Parcerias</span>
+                      <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Permitir anúncios personalizados e sugestões patrocinadas de capacitação de parceiros.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      v-model="privacyData.allowTargetedAds" 
+                      style="width: 18px; height: 18px; cursor: pointer;"
+                    />
+                  </div>
+
+                  <!-- Consentimento de Cookies -->
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+                    <div>
+                      <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Banner de Consentimento LGPD (Cookies)</span>
+                      <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Salvar e persistir consentimento de cookies essenciais de análise de navegação.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      v-model="privacyData.cookieConsent" 
+                      style="width: 18px; height: 18px; cursor: pointer;"
+                    />
+                  </div>
+
+                  <div style="display: flex; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="updatePrivacySettings">
+                      Salvar Configurações
+                    </button>
+                  </div>
+                </div>
+
+                <!-- LGPD Exclusão/Exportação -->
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-server" style="color: var(--color-secondary);"></i> Tratamento de Dados (Direito ao Esquecimento)
+                  </h3>
+                  <p style="margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
+                    Em conformidade com a Lei Geral de Proteção de Dados (LGPD), você tem controle total sobre o download de suas informações cadastrais e o direito de ser excluído permanentemente de toda a base de IA.
+                  </p>
+
+                  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.25rem;">
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px;" @click="exportUserData">
+                      <i class="fa-solid fa-download"></i> Exportar Meus Dados (JSON)
+                    </button>
+                    <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px; color: var(--color-error); border-color: rgba(239,68,68,0.2);" @click="deleteAccount">
+                      <i class="fa-solid fa-user-xmark"></i> Excluir Minha Conta Permanentemente
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. TABA: NOTIFICAÇÕES MULTI-CANAL -->
+              <div v-if="activeSettingsTab === 'notifications'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <!-- Preferências Gerais de Notificações -->
+                <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-bell" style="color: var(--color-secondary);"></i> Canais de Comunicação
+                  </h3>
+                  
+                  <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.notifyEmail"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">📩 Notificações por E-mail</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Receber alertas de novas candidaturas e correspondências de vagas por e-mail</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.notifyWhatsApp"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">💬 Alertas por WhatsApp</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Receber relatórios do Agente de IA diretamente no seu número de contato</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.notifyTelegram"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🤖 Notificações pelo Bot do Telegram</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Ativar e testar o envio de mensagens pelo bot do Telegram VagaSync</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.newsletterEnabled"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">📰 Newsletter & Conteúdos de IA</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Receber informativos de novas integrações de APIs e dicas de recolocação profissional</div>
+                      </div>
+                    </label>
+                  </div>
+                  
+                  <div style="display: flex; justify-content: flex-end;">
+                    <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="updateNotificationSettings">
+                      Salvar Notificações
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Canais Técnicos Existentes -->
+                <div class="glass-card">
+                  <h2 class="section-title" style="margin-bottom: 0.5rem; font-size: 1.1rem;">
+                    <i class="fa-solid fa-network-wired"></i> Fallback Técnico de Canais
+                  </h2>
+                  <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+                    Configure parâmetros SMTP e bots para o fallback automático das notificações e alertas técnicos.
+                  </p>
+
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.5rem;">
+                    <span 
+                      v-if="notifyChannels" 
+                      v-for="[canal, status] in Object.entries(notifyChannels)" 
+                      :key="canal" 
+                      style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 20px; font-weight: 600;"
+                      :style="{
+                        background: status.includes('✅') ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${status.includes('✅') ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
+                        color: status.includes('✅') ? 'var(--color-success)' : 'var(--text-muted)'
+                      }"
+                    >
+                      {{ status }} {{ canal }}
+                    </span>
+                  </div>
+
+                  <!-- Telegram Bot Configs -->
+                  <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                      <Smartphone :size="14" /> Telegram Bot
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                      <div class="form-group" style="margin: 0;">
+                        <label>Token do Bot Telegram</label>
+                        <input type="password" class="form-input" v-model="config.telegram_token" placeholder="1234567890:ABCDef..." />
+                      </div>
+                      <div class="form-group" style="margin: 0;">
+                        <label>Chat ID</label>
+                        <input type="text" class="form-input" v-model="config.telegram_chat_id" placeholder="Ex: 123456789" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- SMTP Configs -->
+                  <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                      <MessageSquare :size="14" /> E-mail (SMTP)
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; row-gap: 1rem;">
+                      <div class="form-group" style="margin: 0;">
+                        <label>E-mail Remetente (Login SMTP)</label>
+                        <input type="email" class="form-input" v-model="config.smtp_email" placeholder="seu@gmail.com" />
+                      </div>
+                      <div class="form-group" style="margin: 0;">
+                        <label>Senha de App / Senha SMTP</label>
+                        <input type="password" class="form-input" v-model="config.smtp_password" placeholder="Senha SMTP..." />
+                      </div>
+                      <div class="form-group" style="margin: 0;">
+                        <label>Host SMTP</label>
+                        <input type="text" class="form-input" v-model="config.smtp_host" placeholder="smtp.gmail.com" />
+                      </div>
+                      <div class="form-group" style="margin: 0;">
+                        <label>Porta SMTP</label>
+                        <input type="number" class="form-input" v-model="config.smtp_port" placeholder="465" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Webhook Configs -->
+                  <div style="margin-bottom: 1.5rem;">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                      <Globe :size="14" /> Webhook Genérico (Slack, Discord...)
+                    </h4>
+                    <div class="form-group" style="margin: 0;">
+                      <label>URL do Webhook</label>
+                      <input type="text" class="form-input" v-model="config.generic_webhook_url" placeholder="https://hooks.slack.com/..." />
+                    </div>
+                  </div>
+
+                  <!-- Ações -->
+                  <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" @click="loadNotifyChannels" style="font-size: 0.85rem;">
+                      Verificar Canais
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-primary"
+                      @click="testNotification" 
+                      :disabled="testingNotify"
+                      style="font-size: 0.85rem;"
+                    >
+                      Testar Todos os Canais
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-primary"
+                      @click="async (e) => { await saveConfig(e); loadNotifyChannels(); }"
+                      style="font-size: 0.85rem;"
+                    >
+                      Salvar Integrações
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. TABA: AUTOMAÇÃO & PARAMETROS DE BUSCA (FORMULÁRIO EXISTENTE) -->
+              <div v-if="activeSettingsTab === 'automation'" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="glass-card">
+                  <h2 class="section-title">
+                    <Settings :size="20" /> Parâmetros de Automação & Busca
+                  </h2>
+                  
+                  <form @submit.prevent="saveConfig">
+                    <!-- Gemini API Key status -->
+                    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 10px; background: rgba(16,185,129,0.07); border: 1px solid rgba(16,185,129,0.2); margin-bottom: 1.25rem;">
+                      <Sparkles :size="16" style="color: var(--color-success); flex-shrink: 0;" />
+                      <div>
+                        <span style="font-size: 0.85rem; font-weight: 600; color: var(--color-success);">Gemini AI — Ativo e Configurado</span>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem;">Chave da API armazenada com segurança no servidor.</p>
+                      </div>
+                      <span style="margin-left: auto; font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 20px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--color-success); font-weight: 700; letter-spacing: 0.05em;">🔒 OCULTA</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Palavras-Chave de Busca (separadas por vírgula)</label>
+                      <input type="text" class="form-input" v-model="config.keywords" placeholder="Ex: Desenvolvedor React, Python, Node.js" />
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
+                      <div class="form-group">
+                        <label>Localização da Busca ({{ activeSearchScope.label }})</label>
+                        <input type="text" class="form-input" v-model="config.search_location" :placeholder="activeSearchScope.placeholder" />
+                      </div>
+                      <div class="form-group">
+                        <label>Buscar por</label>
+                        <select class="form-input" v-model="config.search_scope" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color);">
+                          <option value="cidade">Cidade</option>
+                          <option value="estado">Estado</option>
+                          <option value="pais">País</option>
+                          <option value="internacional">Internacional</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
+                      <input 
+                        type="checkbox" 
+                        id="web_search_chk"
+                        :checked="config.enable_web_search === 'true'"
+                        @change="(e) => config.enable_web_search = e.target.checked ? 'true' : 'false'"
+                        style="cursor: pointer; width: 16px; height: 16px;"
+                      />
+                      <label for="web_search_chk" style="margin: 0; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                        Gemini busca vagas na internet junto com o agente (ATS oficiais, Gupy, Greenhouse, Lever, LinkedIn, Indeed, InfoJobs)
+                      </label>
+                    </div>
+
+                    <div class="form-group" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.22); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                      <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--color-success); font-weight: 700;">
+                        <Map :size="15" /> Mapa Interativo & Geocodificação (Leaflet Ativo)
+                      </label>
+                      <input type="password" class="form-input" v-model="config.google_maps_api_key" placeholder="Google Maps API Key (opcional para geocodificação externa)..." style="margin-top: 0.7rem;" />
+                    </div>
+
+                    <!-- LinkedIn -->
+                    <div style="background: rgba(10,102,194,0.06); border: 1px solid rgba(10,102,194,0.25); border-radius: 12px; padding: 1.25rem;">
+                      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                        <label style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #60a5fa; display: flex; align-items: center; gap: 0.4rem;">
+                          <Globe :size="15" /> LinkedIn Candidaturas
+                        </label>
+                        <button
+                          type="button"
+                          @click="window.open('https://www.linkedin.com/login', '_blank', 'width=900,height=650')"
+                          class="linkedin-login-btn"
+                          style="display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 1rem; border: none; background: linear-gradient(135deg, #0a66c2, #0077b5); color: #fff; font-weight: 700; font-size: 0.82rem; cursor: pointer; box-shadow: 0 2px 12px rgba(10,102,194,0.4);"
+                        >
+                          <Globe :size="14" /> Abrir Login LinkedIn
+                        </button>
+                      </div>
+                      <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>LinkedIn Client ID</label>
+                        <input type="text" class="form-input" v-model="config.linkedin_client_id" placeholder="Client ID..." />
+                      </div>
+                      <div class="form-group" style="margin-bottom: 1rem;">
+                        <label>LinkedIn Client Secret</label>
+                        <input type="password" class="form-input" v-model="config.linkedin_client_secret" placeholder="Client Secret..." />
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
+                        <strong style="color: var(--text-primary); display: block; margin-bottom: 0.2rem;">Como obter o Cookie de sessão (li_at):</strong>
+                        <ol style="margin: 0; padding-left: 1.1rem;">
+                          <li>Faça login pelo botão acima.</li>
+                          <li>Pressione F12 -> Application -> Cookies -> linkedin.com -> copie <code>li_at</code>.</li>
+                        </ol>
+                      </div>
+                      <input type="password" class="form-input" v-model="config.linkedin_cookie" placeholder="Cole o cookie 'li_at' aqui..." />
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; margin-top: 2rem;">
+                      <button type="submit" class="btn btn-primary">
+                        Salvar Parâmetros
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
 
             </div>
 
-            <!-- SUB-ABA 2: CONFIGURAÇÕES DE AUTOMAÇÃO E BUSCA (FORMULÁRIO EXISTENTE) -->
-            <div v-else style="display: flex; flex-direction: column; gap: 1.5rem;">
-              
-              <!-- Busca e LinkedIn -->
-              <div class="glass-card">
-                <h2 class="section-title">
-                  <Settings :size="20" /> Parâmetros de Automação & Busca
-                </h2>
+            <!-- Modal para Alterar Cartão (Netflix-style overlay) -->
+            <div v-if="showChangeCardModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(5, 7, 15, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 9999;">
+              <div class="glass-card" style="width: 100%; max-width: 420px; padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">Alterar Cartão de Pagamento</h3>
+                  <button type="button" @click="showChangeCardModal = false" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.5rem; line-height: 1;">&times;</button>
+                </div>
                 
-                <form @submit="saveConfig">
-                  <!-- Gemini API Key -->
-                  <div style="
-                    display: flex; align-items: center; gap: 0.75rem;
-                    padding: 0.75rem 1rem; border-radius: 10px;
-                    background: rgba(16,185,129,0.07);
-                    border: 1px solid rgba(16,185,129,0.2);
-                    margin-bottom: 1.25rem;
-                  ">
-                    <Sparkles :size="16" style="color: var(--color-success); flex-shrink: 0;" />
-                    <div>
-                      <span style="font-size: 0.85rem; font-weight: 600; color: var(--color-success);">
-                        Gemini AI — Ativo e Configurado
-                      </span>
-                      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem;">
-                        Chave da API armazenada com segurança no servidor. Não é exibida por razões de segurança.
-                      </p>
-                    </div>
-                    <span style="
-                      margin-left: auto; font-size: 0.7rem; padding: 0.2rem 0.6rem;
-                      border-radius: 20px; background: rgba(16,185,129,0.15);
-                      border: 1px solid rgba(16,185,129,0.3); color: var(--color-success);
-                      font-weight: 700; letter-spacing: 0.05em;
-                    ">🔒 OCULTA</span>
+                <form @submit.prevent="saveCardData" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                  <div class="form-group" style="margin: 0;">
+                    <label>Número do Cartão</label>
+                    <input type="text" class="form-input" v-model="changeCardForm.number" placeholder="4532 1122 3344 8899" required />
                   </div>
-
-                  <div class="form-group">
-                    <label>Palavras-Chave de Busca (Gemini + LinkedIn, separadas por vírgula)</label>
-                    <input 
-                      type="text" 
-                      class="form-input" 
-                      v-model="config.keywords" 
-                      placeholder="Ex: Desenvolvedor React, Python, Node.js"
-                    />
+                  <div class="form-group" style="margin: 0;">
+                    <label>Nome do Titular</label>
+                    <input type="text" class="form-input" v-model="changeCardForm.name" placeholder="FATE CANDIDATE" required />
                   </div>
-
-                  <!-- Filtros de Localização e Fontes -->
-                  <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
-                    <div class="form-group">
-                      <label>Localização da Busca ({{ activeSearchScope.label }})</label>
-                      <input 
-                        type="text" 
-                        class="form-input" 
-                        v-model="config.search_location" 
-                        :placeholder="activeSearchScope.placeholder"
-                      />
-                      <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; display: block;">
-                        {{ activeSearchScope.help }}
-                      </span>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group" style="margin: 0;">
+                      <label>Validade</label>
+                      <input type="text" class="form-input" v-model="changeCardForm.expiry" placeholder="MM/AA" required />
                     </div>
-
-                    <div class="form-group">
-                      <label>Buscar por</label>
-                      <select 
-                        class="form-input" 
-                        v-model="config.search_scope" 
-                        style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color);"
-                      >
-                        <option value="cidade">Cidade</option>
-                        <option value="estado">Estado</option>
-                        <option value="pais">País</option>
-                        <option value="internacional">Internacional</option>
-                      </select>
+                    <div class="form-group" style="margin: 0;">
+                      <label>CVV</label>
+                      <input type="password" class="form-input" v-model="changeCardForm.cvv" placeholder="123" required />
                     </div>
                   </div>
-
-                  <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
-                    <input 
-                      type="checkbox" 
-                      id="web_search_chk"
-                      :checked="config.enable_web_search === 'true'"
-                      @change="(e) => config.enable_web_search = e.target.checked ? 'true' : 'false'"
-                      style="cursor: pointer; width: 16px; height: 16px;"
-                    />
-                    <label htmlFor="web_search_chk" style="margin: 0; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
-                      Gemini busca vagas na internet junto com o agente (ATS oficiais, Gupy, Greenhouse, Lever, LinkedIn, Indeed, InfoJobs)
-                    </label>
-                  </div>
-
-                  <div class="form-group" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.22); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
-                    <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--color-success); font-weight: 700;">
-                      <Map :size="15" /> Mapa Interativo & Geocodificação (Leaflet Ativo)
-                    </label>
-                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.4;">
-                      🚀 <strong>Mapa Gratuito Ativado!</strong> O buscador de vagas agora utiliza **Leaflet & OpenStreetMap** por padrão. Não é necessária nenhuma chave de API ou configuração para visualizar o mapa interativo.
-                    </div>
-                    <input
-                      type="password"
-                      class="form-input"
-                      v-model="config.google_maps_api_key"
-                      placeholder="Google Maps API Key (opcional para geocodificação externa)..."
-                      style="margin-top: 0.7rem;"
-                    />
-                    <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.45rem; display: block; line-height: 1.5;">
-                      Nota: A chave acima é opcional. O mapa na aba de Radar de Vagas funciona 100% de graça com Leaflet.
-                    </span>
-                  </div>
-
-                  <div class="form-group" style="background: rgba(10,102,194,0.06); border: 1px solid rgba(10,102,194,0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.5rem;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                      <label style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #60a5fa; display: flex; align-items: center; gap: 0.4rem;">
-                        <Globe :size="15" /> LinkedIn &mdash; Sessão para Candidatura Real
-                      </label>
-                      <button
-                        type="button"
-                        @click="window.open('https://www.linkedin.com/login', '_blank', 'width=900,height=650')"
-                        style="
-                          display: flex; align-items: center; gap: 0.5rem;
-                          padding: 0.45rem 1rem; border: none;
-                          background: linear-gradient(135deg, #0a66c2, #0077b5);
-                          color: #fff; font-weight: 700; font-size: 0.82rem;
-                          cursor: pointer; box-shadow: 0 2px 12px rgba(10,102,194,0.4);
-                          transition: all 0.2s; white-space: nowrap;
-                        "
-                        class="linkedin-login-btn"
-                      >
-                        <Globe :size="14" />
-                        Abrir Login LinkedIn
-                      </button>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                      <label>LinkedIn Client ID</label>
-                      <input
-                        type="text"
-                        class="form-input"
-                        v-model="config.linkedin_client_id"
-                        placeholder="Coloque o LinkedIn Client ID aqui"
-                      />
-                    </div>
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                      <label>LinkedIn Client Secret</label>
-                      <input
-                        type="password"
-                        class="form-input"
-                        v-model="config.linkedin_client_secret"
-                        placeholder="Coloque o LinkedIn Client Secret aqui"
-                      />
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
-                      <strong style="color: var(--text-primary); display: block; margin-bottom: 0.4rem;">Como obter o Cookie de sessão (li_at):</strong>
-                      <ol style="margin: 0; padding-left: 1.1rem;">
-                        <li>Clique em <strong>"Abrir Login LinkedIn"</strong> acima e faça login normalmente.</li>
-                        <li>Com o LinkedIn aberto, pressione <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0 4px; font-family: monospace;">F12</kbd> para abrir o DevTools.</li>
-                        <li>Vá em <strong>Application &rarr; Cookies &rarr; linkedin.com</strong>.</li>
-                        <li>Copie o valor do cookie chamado <code style="color: #60a5fa; background: rgba(96,165,250,0.1); padding: 0 4px; border-radius: 3px;">li_at</code>.</li>
-                        <li>Cole no campo abaixo e salve.</li>
-                      </ol>
-                    </div>
-                    <input
-                      type="password"
-                      class="form-input"
-                      v-model="config.linkedin_cookie"
-                      placeholder="Cole aqui o valor do cookie 'li_at'..."
-                      :style="{ borderColor: config.linkedin_cookie ? 'rgba(10,102,194,0.5)' : undefined }"
-                    />
-                    <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem;">
-                      <AlertCircle :size="11" />
-                      {{ config.linkedin_cookie
-                        ? 'Cookie configurado — o agente fará candidaturas reais no LinkedIn.'
-                        : 'Sem cookie → O agente não fará candidaturas no LinkedIn. Configure o cookie acima para ativar.' }}
-                    </span>
-                  </div>
-
-                  <div style="display: flex; justify-content: flex-end; margin-top: 2rem;">
-                    <button type="submit" class="btn btn-primary">
-                      Salvar Parâmetros
-                    </button>
+                  
+                  <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" @click="showChangeCardModal = false">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar Cartão</button>
                   </div>
                 </form>
-
-                <div v-if="saveSuccess" style="margin-top: 1rem; color: var(--color-success); font-size: 0.9rem; text-align: center;">
-                  Parâmetros salvos com sucesso!
-                </div>
               </div>
-
-              <!-- Notificações do Navegador -->
-              <div class="glass-card">
-                <h2 class="section-title" style="margin-bottom: 0.5rem;">
-                  <i class="fa-solid fa-bell"></i> Notificações do Navegador
-                </h2>
-                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
-                  Controle quando você quer receber notificações push do navegador para manter-se informado sobre novos eventos.
-                </p>
-
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                  <div style="
-                    display: flex; align-items: center; gap: 1rem;
-                    padding: 1rem; border-radius: 12px;
-                    background: rgba(59, 130, 246, 0.08);
-                    border: 1px solid rgba(59, 130, 246, 0.2);
-                  ">
-                    <input
-                      type="checkbox"
-                      v-model="notificationSettings.enabled"
-                      @change="saveNotificationSettings"
-                      style="width: 20px; height: 20px; cursor: pointer;"
-                      id="notif_enabled"
-                    />
-                    <label for="notif_enabled" style="margin: 0; cursor: pointer; flex: 1;">
-                      <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
-                        Habilitar Notificações do Navegador
-                      </div>
-                      <div style="font-size: 0.75rem; color: var(--text-secondary);">
-                        {{ Notification.permission === 'granted' ? '✅ Permissão já concedida' : Notification.permission === 'denied' ? '❌ Permissão negada pelo navegador' : '⏳ Será solicitada quando habilitado' }}
-                      </div>
-                    </label>
-                  </div>
-
-                  <div v-if="notificationSettings.enabled" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px;">
-                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-primary);">Tipos de Notificações:</h4>
-
-                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.15);">
-                      <input
-                        type="checkbox"
-                        v-model="notificationSettings.onApplications"
-                        @change="saveNotificationSettings"
-                        style="width: 16px; height: 16px; cursor: pointer;"
-                      />
-                      <div style="flex: 1;">
-                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">✅ Candidaturas Registradas</div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando uma candidatura é enviada com sucesso</div>
-                      </div>
-                    </label>
-
-                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15);">
-                      <input
-                        type="checkbox"
-                        v-model="notificationSettings.onRecruiterContact"
-                        @change="saveNotificationSettings"
-                        style="width: 16px; height: 16px; cursor: pointer;"
-                      />
-                      <div style="flex: 1;">
-                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">📞 Contato de Recrutador</div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando um recrutador responde ou entra em contato</div>
-                      </div>
-                    </label>
-
-                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
-                      <input
-                        type="checkbox"
-                        v-model="notificationSettings.onSearchResults"
-                        @change="saveNotificationSettings"
-                        style="width: 16px; height: 16px; cursor: pointer;"
-                      />
-                      <div style="flex: 1;">
-                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">🌐 Novas Vagas Encontradas</div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando novas vagas são encontradas na busca</div>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div v-else style="padding: 0.75rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary);">
-                    Habilite as notificações acima para configurar quais tipos de eventos deseja receber.
-                  </div>
-                </div>
-              </div>
-
-              <!-- Notificações Multi-Canal -->
-              <div class="glass-card">
-                <h2 class="section-title" style="margin-bottom: 0.5rem;">
-                  <i class="fa-solid fa-bell"></i> Notificações Multi-Canal
-                </h2>
-                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
-                  Configure um ou mais canais abaixo. O Vaga Sync tentará cada canal em ordem (n8n → Telegram → E-mail → Webhook Genérico) com fallback automático.
-                </p>
-
-                <!-- Status dos canais -->
-                <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.5rem;">
-                  <span 
-                    v-if="notifyChannels" 
-                    v-for="[canal, status] in Object.entries(notifyChannels)" 
-                    :key="canal" 
-                    style="
-                      font-size: 0.75rem; padding: 0.25rem 0.6rem;
-                      border-radius: 20px; font-weight: 600;
-                    "
-                    :style="{
-                      background: status.includes('✅') ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${status.includes('✅') ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
-                      color: status.includes('✅') ? 'var(--color-success)' : 'var(--text-muted)'
-                    }"
-                  >
-                    {{ status }} {{ canal }}
-                  </span>
-                  <button 
-                    v-else 
-                    class="btn btn-secondary" 
-                    style="font-size: 0.78rem; padding: 0.3rem 0.8rem;"
-                    @click="loadNotifyChannels"
-                  >
-                    Verificar canais configurados
-                  </button>
-                </div>
-
-                <!-- Telegram -->
-                <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
-                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                    <Smartphone :size="14" /> Telegram Bot
-                  </h4>
-                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-                    Gratuito, instantâneo no celular. Crie um bot em @BotFather e copie o Token. Para o Chat ID, mande /start ao bot e acesse
-                    <code style="margin-left: 4px; color: var(--color-secondary);">api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>.
-                  </p>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                    <div class="form-group">
-                      <label>Token do Bot Telegram</label>
-                      <input type="password" class="form-input" v-model="config.telegram_token" placeholder="1234567890:ABCDef..." />
-                    </div>
-                    <div class="form-group">
-                      <label>Chat ID</label>
-                      <input type="text" class="form-input" v-model="config.telegram_chat_id" placeholder="Ex: 123456789" />
-                    </div>
-                  </div>
-                </div>
-
-                <!-- E-mail SMTP -->
-                <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
-                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                    <MessageSquare :size="14" /> E-mail (SMTP)
-                  </h4>
-                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-                    Gmail: host <code style="color: var(--color-secondary);">smtp.gmail.com</code> porta <code style="color: var(--color-secondary);">465</code> (use uma Senha de App).
-                    Outlook: host <code style="color: var(--color-secondary);">smtp-mail.outlook.com</code> porta <code style="color: var(--color-secondary);">587</code>.
-                  </p>
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                    <div class="form-group">
-                      <label>E-mail Remetente (Login SMTP)</label>
-                      <input type="email" class="form-input" v-model="config.smtp_email" placeholder="seu@gmail.com" />
-                    </div>
-                    <div class="form-group">
-                      <label>Senha de App / Senha SMTP</label>
-                      <input type="password" class="form-input" v-model="config.smtp_password" placeholder="Senha de App do Gmail..." />
-                    </div>
-                    <div class="form-group">
-                      <label>Host SMTP</label>
-                      <input type="text" class="form-input" v-model="config.smtp_host" placeholder="smtp.gmail.com" />
-                    </div>
-                    <div class="form-group">
-                      <label>Porta SMTP</label>
-                      <input type="number" class="form-input" v-model="config.smtp_port" placeholder="465" />
-                    </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                      <label>Enviar Notificações Para (E-mail Destino)</label>
-                      <input type="email" class="form-input" v-model="config.notify_email" placeholder="Deixe em branco para usar o mesmo do remetente" />
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Webhook Genérico -->
-                <div style="margin-bottom: 1.5rem;">
-                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                    <Globe :size="14" /> Webhook Genérico (Slack, Discord, Zapier, Make…)
-                  </h4>
-                  <div class="form-group">
-                    <label>URL do Webhook</label>
-                    <input type="text" class="form-input" v-model="config.generic_webhook_url" placeholder="https://hooks.slack.com/... ou https://discord.com/api/webhooks/..." />
-                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">
-                      Funciona com Slack, Discord, Zapier, Make.com ou qualquer serviço que aceita POST JSON.
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Botões de ação -->
-                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                  <button type="button" class="btn btn-secondary" @click="loadNotifyChannels" style="font-size: 0.85rem;">
-                    <CheckCircle :size="14" style="margin-right: 0.3rem;" />
-                    Verificar Canais
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-primary"
-                    @click="testNotification" 
-                    :disabled="testingNotify"
-                    style="font-size: 0.85rem;"
-                    :style="{ background: testingNotify ? 'rgba(59,130,246,0.4)' : undefined }"
-                  >
-                    <template v-if="testingNotify">
-                      <Loader :size="14" class="spin-animation" style="margin-right: 0.3rem;" />Testando...
-                    </template>
-                    <template v-else>
-                      <Bell :size="14" style="margin-right: 0.3rem;" />Testar Todos os Canais
-                    </template>
-                  </button>
-                  <button 
-                    type="button" 
-                    class="btn btn-primary"
-                    @click="async (e) => { await saveConfig(e); loadNotifyChannels(); }"
-                    style="font-size: 0.85rem;"
-                  >
-                    Salvar Notificações
-                  </button>
-                </div>
-              </div>
-
             </div>
 
           </div>
