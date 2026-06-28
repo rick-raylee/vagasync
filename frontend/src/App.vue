@@ -1304,6 +1304,7 @@ const checkoutPlan = ref('candidate_premium');
 const checkoutPaymentMethod = ref('pix');
 const checkoutCard = ref({ number: '', expiry: '', cvc: '', name: '' });
 const pixCopied = ref(false);
+const pixGeneratedData = ref(null);
 
 const checkoutTitle = ref('Upgrade Premium');
 const checkoutPrice = ref('R$ 29,90/mês');
@@ -1381,6 +1382,7 @@ const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') 
   checkoutTitle.value = title;
   checkoutPrice.value = price;
   pixCopied.value = false;
+  pixGeneratedData.value = null;
   checkoutOpen.value = true;
 };
 
@@ -1471,17 +1473,21 @@ const handleCheckoutPayment = async () => {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.ticket_url) {
-          showToast('Redirecionando...', 'Abrindo tela de pagamento do Mercado Pago...', 'success');
-          setTimeout(() => {
-            window.open(data.ticket_url, '_blank');
-          }, 1000);
-        } else if (data.qr_code) {
-          navigator.clipboard.writeText(data.qr_code);
-          showToast('Pix Gerado', 'Código Copia e Cola copiado para a área de transferência!', 'success');
-        } else {
-          showToast('Pix Gerado', 'Verifique o status da sua cobrança no Histórico.', 'success');
+        
+        let qrCodeSrc = data.qr_code_base64 || '';
+        if (qrCodeSrc && !qrCodeSrc.startsWith('data:') && !qrCodeSrc.startsWith('http')) {
+          qrCodeSrc = `data:image/png;base64,${qrCodeSrc}`;
         }
+        
+        pixGeneratedData.value = {
+          qrCode: qrCodeSrc,
+          copiaECola: data.qr_code,
+          ticketUrl: data.ticket_url,
+          amount: data.amount,
+          title: data.title
+        };
+        
+        showToast('Pix Gerado! 🚀', 'Escaneie o QR Code ou copie a chave copia-e-cola.', 'success');
       } else {
         throw new Error('Falha ao obter dados do Pix.');
       }
@@ -1489,8 +1495,8 @@ const handleCheckoutPayment = async () => {
     } catch (e) {
       console.error(e);
       showToast('Erro ao Gerar Pix', 'Não foi possível estabelecer contato com o Mercado Pago. Tente novamente.', 'error');
+      checkoutOpen.value = false;
     }
-    checkoutOpen.value = false;
   }
 };
 
@@ -3042,14 +3048,53 @@ const restoreCandidate = () => {
         </div>
 
         <!-- Pix Area (Banco Central BR Code) -->
-        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.15); text-align: center;">
-          <div style="background: rgba(0, 242, 254, 0.05); padding: 1rem; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
-            <i class="fa-solid fa-pix" style="font-size: 2.2rem; color: #00f2fe; filter: drop-shadow(0 0 8px rgba(0,242,254,0.4));"></i>
-            <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Pagamento Integrado via Mercado Pago</span>
-            <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-              Ao avançar, abriremos a plataforma oficial de pagamentos do **Mercado Pago** para você escanear o QR Code Pix ou copiar a chave copia-e-cola com total segurança.
-            </p>
-          </div>
+        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.15); text-align: center; width: 100%;">
+          
+          <!-- STEP 1: Before Generating -->
+          <template v-if="!pixGeneratedData">
+            <div style="background: rgba(0, 242, 254, 0.05); padding: 1rem; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
+              <i class="fa-solid fa-pix" style="font-size: 2.2rem; color: #00f2fe; filter: drop-shadow(0 0 8px rgba(0,242,254,0.4));"></i>
+              <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Pagamento Integrado via Mercado Pago</span>
+              <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+                Ao avançar, geraremos a cobrança Pix oficial com QR Code e Chave Copia e Cola em tempo real.
+              </p>
+            </div>
+          </template>
+
+          <!-- STEP 2: After Generating -->
+          <template v-else>
+            <div style="background: white; padding: 0.75rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center; margin-bottom: 0.25rem;">
+              <img 
+                :src="pixGeneratedData.qrCode" 
+                alt="QR Code Pix Oficial" 
+                style="width: 160px; height: 160px; display: block; object-fit: contain;" 
+              />
+            </div>
+            
+            <button 
+              type="button" 
+              class="btn btn-secondary" 
+              style="font-size: 0.8rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); color: #34d399;"
+              @click="() => {
+                navigator.clipboard.writeText(pixGeneratedData.copiaECola);
+                pixCopied = true;
+                showToast('Copiado', 'Código Pix Copia e Cola copiado com sucesso!', 'success');
+              }"
+            >
+              <i class="fa-solid fa-copy"></i>
+              {{ pixCopied ? '✓ Código Copiado!' : 'Copiar Código Copia e Cola' }}
+            </button>
+
+            <a 
+              v-if="pixGeneratedData.ticketUrl"
+              :href="pixGeneratedData.ticketUrl" 
+              target="_blank"
+              class="btn btn-secondary" 
+              style="font-size: 0.8rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
+            >
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir tela do Mercado Pago
+            </a>
+          </template>
           
           <div style="display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); justify-content: center; margin-top: 0.25rem;">
             <i class="fa-solid fa-lock" style="color: var(--color-success);"></i> Conexão SSL 100% Protegida
@@ -3097,11 +3142,17 @@ const restoreCandidate = () => {
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
-          <button type="button" class="btn btn-primary" style="flex: 1;" @click="handleCheckoutPayment">
+          <button 
+            v-if="checkoutPaymentMethod === 'card' || !pixGeneratedData"
+            type="button" 
+            class="btn btn-primary" 
+            style="flex: 1;" 
+            @click="handleCheckoutPayment"
+          >
             {{ checkoutPaymentMethod === 'card' ? 'Finalizar Assinatura 🔒' : 'Gerar Pix no Mercado Pago 🚀' }}
           </button>
           <button type="button" class="btn btn-secondary" style="flex: 1;" @click="checkoutOpen = false">
-            Voltar
+            {{ pixGeneratedData ? 'Fechar' : 'Voltar' }}
           </button>
         </div>
       </div>
