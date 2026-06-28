@@ -1340,7 +1340,7 @@ const pixPayload = computed(() => {
 });
 
 const pixQRCodeUrl = computed(() => {
-  return `https://chart.googleapis.com/chart?chs=250x250&cht=qr&chld=M|1&chl=${encodeURIComponent(pixPayload.value)}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixPayload.value)}`;
 });
 
 const copyPixCopiaECola = () => {

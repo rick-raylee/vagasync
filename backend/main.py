@@ -1656,9 +1656,9 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(tx)
         
-        # QR Code imagem usando API do Google Charts
+        # QR Code imagem usando API do QR Server (totalmente ativa e gratuita)
         import urllib.parse
-        qr_code_image_url = f"https://chart.googleapis.com/chart?chs=250x250&cht=qr&chld=M|1&chl={urllib.parse.quote(copia_e_cola)}"
+        qr_code_image_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(copia_e_cola)}"
         
         return {
             "payment_id": f"fallback_{tx.id}",
