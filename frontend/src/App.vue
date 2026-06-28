@@ -2922,7 +2922,7 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'dashboard' }]"
             @click="activeTab = 'dashboard'"
           >
-            <i class="fa-solid fa-briefcase" style="font-size: 13px; color: #3b82f6;"></i> Painel Principal
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #3b82f6; flex-shrink: 0;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg> Painel Principal
           </button>
           
           <button 
@@ -2930,7 +2930,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'map'"
             style="position: relative;"
           >
-            <i class="fa-solid fa-map-location-dot" style="font-size: 13px; color: #10b981;"></i> Mapa de Vagas
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #10b981; flex-shrink: 0;"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg> Mapa de Vagas
             <span v-if="jobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2946,7 +2946,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'contato'"
             style="position: relative;"
           >
-            <i class="fa-solid fa-address-card" style="font-size: 13px; color: #ec4899;"></i> Contato com RH
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #ec4899; flex-shrink: 0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> Contato com RH
             <span v-if="stats.applied > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2962,7 +2962,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <i class="fa-solid fa-comment-dots" style="font-size: 13px; color: #00f2fe;"></i> Mensagens
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #00f2fe; flex-shrink: 0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2977,35 +2977,35 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'resume' }]"
             @click="activeTab = 'resume'"
           >
-            <i class="fa-solid fa-file-invoice" style="font-size: 13px; color: #fbbf24;"></i> Currículo & Perfil IA
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #fbbf24; flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Currículo & Perfil IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'career' }]"
             @click="activeTab = 'career'"
           >
-            <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px; color: #a855f7;"></i> Copiloto IA
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #a855f7; flex-shrink: 0;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg> Copiloto IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'interview' }]"
             @click="activeTab = 'interview'"
           >
-            <i class="fa-solid fa-microphone-lines" style="font-size: 13px; color: #f43f5e;"></i> Treino Entrevista
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #f43f5e; flex-shrink: 0;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg> Treino Entrevista
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
             @click="activeTab = 'community_feed'; fetchFeed();"
           >
-            <i class="fa-solid fa-users" style="font-size: 13px; color: #fb923c;"></i> Feed Comunidade
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #fb923c; flex-shrink: 0;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Feed Comunidade
           </button>
           
           <button 
             :class="['nav-link-btn', { active: activeTab === 'config' }]"
             @click="activeTab = 'config'"
           >
-            <i class="fa-solid fa-sliders" style="font-size: 13px; color: #94a3b8;"></i> Configurações
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #94a3b8; flex-shrink: 0;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Configurações
           </button>
         </nav>
 
@@ -3014,14 +3014,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_dashboard' }]"
             @click="activeTab = 'recruiter_dashboard'"
           >
-            <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> Painel Recrutador
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #3b82f6; flex-shrink: 0;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg> Painel Recrutador
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'recruiter_jobs' }]"
             @click="activeTab = 'recruiter_jobs'"
           >
-            <i class="fa-solid fa-circle-plus" style="font-size: 13px; color: #10b981;"></i> Criar Vaga
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #10b981; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Criar Vaga
           </button>
 
           <button 
@@ -3029,7 +3029,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <i class="fa-solid fa-comment-dots" style="font-size: 13px; color: #00f2fe;"></i> Mensagens
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #00f2fe; flex-shrink: 0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -3044,14 +3044,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_billing' }]"
             @click="activeTab = 'recruiter_billing'"
           >
-            <i class="fa-solid fa-wallet" style="font-size: 13px; color: #eab308;"></i> Faturamento SaaS
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #eab308; flex-shrink: 0;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> Faturamento SaaS
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
             @click="activeTab = 'community_feed'; fetchFeed();"
           >
-            <i class="fa-solid fa-users" style="font-size: 13px; color: #fb923c;"></i> Feed Comunidade
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #fb923c; flex-shrink: 0;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Feed Comunidade
           </button>
         </nav>
 
@@ -3060,37 +3060,37 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'super_admin' }]"
             @click="activeTab = 'super_admin'"
           >
-            <i class="fa-solid fa-earth-americas" style="font-size: 13px; color: #3b82f6;"></i> Painel Global
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #3b82f6; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> Painel Global
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_monetization' }]"
             @click="activeTab = 'super_admin_monetization'"
           >
-            <i class="fa-solid fa-scale-balanced" style="font-size: 13px; color: #10b981;"></i> Monetização
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #10b981; flex-shrink: 0;"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Monetização
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_gateways' }]"
             @click="activeTab = 'super_admin_gateways'"
           >
-            <i class="fa-solid fa-credit-card" style="font-size: 13px; color: #a855f7;"></i> Gateways
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #a855f7; flex-shrink: 0;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg> Gateways
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_tracking' }]"
             @click="activeTab = 'super_admin_tracking'"
           >
-            <i class="fa-solid fa-magnifying-glass-location" style="font-size: 13px; color: #00f2fe;"></i> Rastreamento
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #00f2fe; flex-shrink: 0;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> Rastreamento
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_content' }]"
             @click="activeTab = 'super_admin_content'"
           >
-            <i class="fa-solid fa-newspaper" style="font-size: 13px; color: #fb923c;"></i> Conteúdo
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #fb923c; flex-shrink: 0;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg> Conteúdo
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_security' }]"
             @click="activeTab = 'super_admin_security'"
           >
-            <i class="fa-solid fa-shield-halved" style="font-size: 13px; color: #ef4444;"></i> Segurança
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #ef4444; flex-shrink: 0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> Segurança
           </button>
         </nav>
         
@@ -3352,28 +3352,46 @@ const restoreCandidate = () => {
           <!-- Stats Metrics Row -->
           <div class="stats-row">
             <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
-              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/briefcase.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Vagas" /></div>
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+              </div>
               <div>
                 <div class="stat-value">{{ stats.total }}</div>
                 <div class="stat-label">Vagas Encontradas</div>
               </div>
             </div>
             <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
-              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/check.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Candidaturas" /></div>
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
               <div>
                 <div class="stat-value">{{ stats.applied }}</div>
                 <div class="stat-label">Candidaturas</div>
               </div>
             </div>
             <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
-              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/star.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Match Médio IA" /></div>
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+              </div>
               <div>
                 <div class="stat-value">{{ stats.averageMatch }}%</div>
                 <div class="stat-label">Match Médio IA</div>
               </div>
             </div>
             <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
-              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/chat.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Mensagens" /></div>
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.4));">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
               <div>
                 <div class="stat-value">{{ stats.contacted }}</div>
                 <div class="stat-label">Retornos de RH</div>
@@ -4701,7 +4719,10 @@ const restoreCandidate = () => {
               <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Gestão de Vagas</span>
-                  <img src="/icons/3d/briefcase.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Vagas 3D" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.3));">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                  </svg>
                 </div>
                 <div style="display: flex; gap: 0.8rem; margin-top: 0.25rem; font-size: 0.82rem; width: 100%;">
                   <div style="flex: 1; text-align: center; background: rgba(59,130,246,0.1); padding: 4px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.25);">
@@ -4723,7 +4744,10 @@ const restoreCandidate = () => {
               <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">SLA Médio</span>
-                  <img src="/icons/3d/clock.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Relógio 3D" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.3));">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: #f59e0b; font-weight: 800;">{{ dashboardMetrics.sla }}</span>
@@ -4738,7 +4762,9 @@ const restoreCandidate = () => {
               <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Satisfação (NPS)</span>
-                  <img src="/icons/3d/star.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Estrela 3D" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.3));">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: #ec4899; font-weight: 800;">{{ dashboardMetrics.nps }}%</span>
@@ -4752,7 +4778,9 @@ const restoreCandidate = () => {
               <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Tempo de Resposta</span>
-                  <img src="/icons/3d/chat.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Chat 3D" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px; filter: drop-shadow(0 0 6px rgba(0, 242, 254, 0.3));">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: var(--color-secondary); font-weight: 800;">{{ dashboardMetrics.responseTime }}</span>
