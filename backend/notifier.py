@@ -27,9 +27,16 @@ from database import SessionLocal, Config, add_log
 # ─────────────────────────────────────────────
 
 def get_cfg(db: Session, key: str) -> str:
-    """Retorna o valor de uma chave de configuração ou string vazia."""
+    """Retorna o valor de uma chave de configuração ou string vazia (suporta encriptação)."""
     row = db.query(Config).filter(Config.key == key).first()
-    return row.value.strip() if row and row.value else ""
+    if row and row.value:
+        return row.value.strip()
+    enc_row = db.query(Config).filter(Config.key == f"enc_{key}").first()
+    if enc_row and enc_row.value:
+        import security
+        decrypted = security.decrypt_data(enc_row.value)
+        return decrypted.strip() if decrypted else ""
+    return ""
 
 
 def build_job_payload(event_type: str, job) -> dict:
@@ -56,6 +63,7 @@ EVENT_LABELS = {
     "job_applied":      "✅ Candidatura Enviada",
     "recruiter_contact": "📞 Recrutador Entrou em Contato!",
     "followup_sent":    "📨 Follow-up de RH Agendado",
+    "candidate_applied": "👥 Novo Candidato Inscrito!"
 }
 
 
@@ -225,6 +233,8 @@ async def dispatch_notification(event_type: str, job, db: Session) -> dict:
 
     # ── Canal 0: WhatsApp (CallMeBot) ──
     wa_phone = get_cfg(db, "whatsapp_phone")
+    if event_type == "candidate_applied" and job.recruiter_phone:
+        wa_phone = job.recruiter_phone
     wa_apikey = get_cfg(db, "whatsapp_webhook")
     if wa_phone and wa_apikey:
         ok = await loop.run_in_executor(None, _send_whatsapp, wa_phone, wa_apikey, text)
@@ -253,6 +263,8 @@ async def dispatch_notification(event_type: str, job, db: Session) -> dict:
     smtp_user  = get_cfg(db, "smtp_email")
     smtp_pass  = get_cfg(db, "smtp_password")
     smtp_to    = get_cfg(db, "notify_email") or smtp_user
+    if event_type == "candidate_applied" and job.recruiter_contact:
+        smtp_to = job.recruiter_contact
     smtp_host  = get_cfg(db, "smtp_host") or "smtp.gmail.com"
     smtp_port  = int(get_cfg(db, "smtp_port") or "465")
 

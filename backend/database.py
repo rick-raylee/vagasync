@@ -28,9 +28,11 @@ class Job(Base):
     recruiter_contact = Column(String, nullable=True)
     recruiter_phone = Column(String, nullable=True)
     company_address = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
     followup_sent = Column(Boolean, default=False)
     followup_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
 
 class Config(Base):
     __tablename__ = "configs"
@@ -95,6 +97,39 @@ class FinancialTransaction(Base):
     payment_method = Column(String) # stripe, mercadopago, pix
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class FeedPost(Base):
+    __tablename__ = "feed_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author_name = Column(String, nullable=False)
+    author_email = Column(String, nullable=False)
+    author_role = Column(String, nullable=False) # 'candidate', 'recruiter', 'ai_agent'
+    content = Column(Text, nullable=False)
+    likes = Column(Integer, default=0)
+    claps = Column(Integer, default=0)
+    loves = Column(Integer, default=0)
+    ideas = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FeedComment(Base):
+    __tablename__ = "feed_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, index=True)
+    author_name = Column(String, nullable=False)
+    author_email = Column(String, nullable=False)
+    author_role = Column(String, nullable=False) # 'candidate', 'recruiter', 'ai_agent'
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FeedReaction(Base):
+    __tablename__ = "feed_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, index=True)
+    user_email = Column(String, index=True)
+    reaction_type = Column(String) # 'like', 'clap', 'love', 'idea'
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     
@@ -106,41 +141,14 @@ def init_db():
             db.execute(text("ALTER TABLE jobs ADD COLUMN recruiter_phone TEXT"))
         if "company_address" not in columns:
             db.execute(text("ALTER TABLE jobs ADD COLUMN company_address TEXT"))
+        if "image_url" not in columns:
+            db.execute(text("ALTER TABLE jobs ADD COLUMN image_url TEXT"))
+        if "expires_at" not in columns:
+            db.execute(text("ALTER TABLE jobs ADD COLUMN expires_at DATETIME"))
         db.commit()
         
-        # Seed mock database if empty
-        from datetime import datetime, timedelta
-        import random
-        
         # Check if transaction table is empty
-        cursor = db.execute(text("SELECT COUNT(*) FROM financial_transactions"))
-        count_tx = cursor.fetchone()[0]
-        if count_tx == 0:
-            plans = [("Candidate Premium", 29.90), ("Recruiter Pro", 149.90)]
-            payment_methods = ["stripe", "mercadopago", "pix"]
-            statuses = ["paid", "paid", "paid", "cancelled", "pending"]
-            emails = ["carlos.silva@gmail.com", "ana.recruiter@tech.io", "mateus.costa@yahoo.com", "juliana.hr@startup.co", "roberto.dev@outlook.com"]
-            
-            now = datetime.utcnow()
-            for i in range(25):
-                plan_name, amount = random.choice(plans)
-                status = random.choice(statuses)
-                payment_method = random.choice(payment_methods)
-                email = f"user{i}@example.com" if i >= len(emails) else emails[i]
-                created_at = now - timedelta(days=random.randint(1, 45))
-                
-                db.execute(text("""
-                    INSERT INTO financial_transactions (user_email, plan_name, amount, status, payment_method, created_at)
-                    VALUES (:email, :plan_name, :amount, :status, :payment_method, :created_at)
-                """), {
-                    "email": email,
-                    "plan_name": plan_name,
-                    "amount": amount,
-                    "status": status,
-                    "payment_method": payment_method,
-                    "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S")
-                })
-            db.commit()
+        # Mock transaction seeding disabled for production live site
             
         cursor = db.execute(text("SELECT COUNT(*) FROM blog_posts"))
         count_blog = cursor.fetchone()[0]

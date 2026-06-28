@@ -1620,6 +1620,50 @@ const dashboardMetrics = computed(() => {
   };
 });
 
+const getDaysRemaining = (job) => {
+  const expiry = job.expires_at ? new Date(job.expires_at) : new Date(new Date(job.created_at).getTime() + 15 * 24 * 60 * 60 * 1000);
+  const diff = expiry - new Date();
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return days < 0 ? 0 : days;
+};
+
+const extendJob = async (job) => {
+  try {
+    showToast('Processando...', 'Prorrogando vigência da vaga...', 'info');
+    if (job.id && String(job.id).length < 10) {
+      const res = await fetch(`${API_BASE}/jobs/${job.id}/extend`, { method: 'POST' });
+      if (res.ok) {
+        const updatedJob = await res.json();
+        const idx = publishedJobs.value.findIndex(j => j.id === job.id);
+        if (idx !== -1) {
+          publishedJobs.value[idx].expires_at = updatedJob.expires_at;
+          localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
+        }
+        const jobsIdx = jobs.value.findIndex(j => j.id === job.id);
+        if (jobsIdx !== -1) {
+          jobs.value[jobsIdx].expires_at = updatedJob.expires_at;
+        }
+      }
+    } else {
+      const currentExpiry = job.expires_at ? new Date(job.expires_at) : new Date(new Date(job.created_at).getTime() + 15 * 24 * 60 * 60 * 1000);
+      const newExpiry = new Date(currentExpiry.getTime() + 15 * 24 * 60 * 60 * 1000);
+      const idx = publishedJobs.value.findIndex(j => j.id === job.id);
+      if (idx !== -1) {
+        publishedJobs.value[idx].expires_at = newExpiry.toISOString();
+        localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
+      }
+      const jobsIdx = jobs.value.findIndex(j => j.id === job.id);
+      if (jobsIdx !== -1) {
+        jobs.value[jobsIdx].expires_at = newExpiry.toISOString();
+      }
+    }
+    showToast('Vaga Prorrogada! ⏳', 'O período de vigência foi estendido por mais 15 dias com sucesso.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Erro', 'Não foi possível prorrogar a vaga.', 'error');
+  }
+};
+
 const handlePublishJob = async (e) => {
   if (e) e.preventDefault();
   if (!newJobForm.value.title || !newJobForm.value.company) {
@@ -1627,23 +1671,53 @@ const handlePublishJob = async (e) => {
     return;
   }
   
-  const job = {
-    id: Date.now(),
-    title: newJobForm.value.title,
-    company: newJobForm.value.company,
-    location: newJobForm.value.location || 'Remoto — Brasil',
-    link: 'https://linkedin.com/jobs/view/' + Date.now(),
-    source: 'recruiter',
-    match_score: 95,
-    status: 'found',
-    created_at: new Date().toISOString(),
-    recruiter_name: authForm.value.name || 'Recrutador Vaga Sync',
-    followup_sent: false
-  };
+  const userEmail = authForm.value.email || localStorage.getItem('vagasync_profile_email') || 'recrutador@vagasync.com.br';
+  const userName = authForm.value.name || localStorage.getItem('vagasync_profile_name') || 'Recrutador Vaga Sync';
   
-  publishedJobs.value = [job, ...publishedJobs.value];
-  localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
-  jobs.value = [job, ...jobs.value];
+  try {
+    showToast('Salvando...', 'Publicando vaga no radar...', 'info');
+    const response = await fetch(`${API_BASE}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newJobForm.value.title,
+        company: newJobForm.value.company,
+        location: newJobForm.value.location || 'Remoto — Brasil',
+        description: newJobForm.value.description || '',
+        recruiter_name: userName,
+        recruiter_contact: userEmail,
+        recruiter_phone: config.value.whatsapp_phone || ''
+      })
+    });
+    
+    if (response.ok) {
+      const savedJob = await response.json();
+      publishedJobs.value = [savedJob, ...publishedJobs.value];
+      localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
+      jobs.value = [savedJob, ...jobs.value];
+    } else {
+      throw new Error('Falha no salvamento');
+    }
+  } catch (e) {
+    const job = {
+      id: Date.now(),
+      title: newJobForm.value.title,
+      company: newJobForm.value.company,
+      location: newJobForm.value.location || 'Remoto — Brasil',
+      link: 'https://linkedin.com/jobs/view/' + Date.now(),
+      source: 'recruiter',
+      match_score: 95,
+      status: 'found',
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+      recruiter_name: userName,
+      recruiter_contact: userEmail,
+      followup_sent: false
+    };
+    publishedJobs.value = [job, ...publishedJobs.value];
+    localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
+    jobs.value = [job, ...jobs.value];
+  }
   
   newJobForm.value = { title: '', company: '', location: '', keywords: '', description: '' };
   showToast('Vaga Publicada!', 'A vaga foi cadastrada com sucesso e está visível no radar.', 'success');
@@ -5201,6 +5275,77 @@ const restoreCandidate = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Vagas Publicadas por Mim -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 1rem; border-color: rgba(0, 242, 254, 0.2);">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem;">
+                <h3 class="section-title" style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-bullhorn" style="color: #00f2fe;"></i> Gestão de Vigência de Vagas Publicadas</h3>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">
+                  Vigência inicial padrão: 15 dias • Prorrogável por mais 15 dias
+                </span>
+              </div>
+
+              <div v-if="publishedJobs.length === 0" style="padding: 2rem; text-align: center; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.82rem; color: var(--text-secondary);">
+                Nenhuma vaga publicada por você ainda. Vá na aba "Postar Vaga" para cadastrar sua primeira vaga!
+              </div>
+
+              <div v-else style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.15);">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-secondary); font-weight: 600;">
+                      <th style="padding: 0.75rem 1rem;">Cargo / Vaga</th>
+                      <th style="padding: 0.75rem 1rem;">Publicação</th>
+                      <th style="padding: 0.75rem 1rem;">Vencimento</th>
+                      <th style="padding: 0.75rem 1rem;">Tempo Restante</th>
+                      <th style="padding: 0.75rem 1rem; text-align: right;">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="job in publishedJobs" :key="job.id" style="border-bottom: 1px solid var(--border-color); color: var(--text-primary);">
+                      <td style="padding: 0.75rem 1rem;">
+                        <span style="font-weight: 700; color: #fff; display: block;">{{ job.title }}</span>
+                        <span style="font-size: 0.7rem; color: var(--text-muted);">{{ job.company }} • {{ job.location }}</span>
+                      </td>
+                      <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">
+                        {{ new Date(job.created_at).toLocaleDateString('pt-BR') }}
+                      </td>
+                      <td style="padding: 0.75rem 1rem; color: var(--text-secondary);">
+                        {{ new Date(job.expires_at || new Date(new Date(job.created_at).getTime() + 15*24*60*60*1000)).toLocaleDateString('pt-BR') }}
+                      </td>
+                      <td style="padding: 0.75rem 1rem;">
+                        <span :style="{
+                          background: getDaysRemaining(job) <= 3 ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)',
+                          color: getDaysRemaining(job) <= 3 ? 'var(--color-error)' : 'var(--color-success)',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.72rem',
+                          fontWeight: '700',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }">
+                          <i class="fa-solid fa-clock"></i>
+                          {{ getDaysRemaining(job) <= 0 ? 'Expirada' : getDaysRemaining(job) + (getDaysRemaining(job) === 1 ? ' dia restante' : ' dias restantes') }}
+                        </span>
+                        <span v-if="getDaysRemaining(job) <= 3 && getDaysRemaining(job) > 0" style="display: block; font-size: 0.65rem; color: var(--color-error); font-weight: 700; margin-top: 3px;">
+                          ⚠️ Expira em breve! Prorrogue agora.
+                        </span>
+                      </td>
+                      <td style="padding: 0.75rem 1rem; text-align: right;">
+                        <button 
+                          type="button" 
+                          class="btn btn-secondary" 
+                          style="font-size: 0.72rem; padding: 0.35rem 0.75rem; border-color: rgba(0, 242, 254, 0.25); color: #00f2fe; background: rgba(0, 242, 254, 0.05); font-weight: 700;"
+                          @click="extendJob(job)"
+                        >
+                          <i class="fa-solid fa-calendar-plus"></i> Prorrogar +15 Dias
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 

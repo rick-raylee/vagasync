@@ -158,6 +158,7 @@ class JobResponse(BaseModel):
     followup_sent: bool
     followup_at: Optional[datetime] = None
     created_at: datetime
+    expires_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True
@@ -613,7 +614,9 @@ def get_jobs(db: Session = Depends(get_db)):
 def create_recruiter_job(payload: JobCreate, db: Session = Depends(get_db)):
     """Cria uma vaga publicada por recrutador e a salva no banco."""
     import hashlib
+    from datetime import timedelta
     unique_id = hashlib.md5(f"{payload.title}{payload.company}{datetime.utcnow().isoformat()}".encode()).hexdigest()[:12]
+    now = datetime.utcnow()
     job = Job(
         title=payload.title,
         company=payload.company,
@@ -629,7 +632,8 @@ def create_recruiter_job(payload: JobCreate, db: Session = Depends(get_db)):
         company_address=payload.company_address,
         image_url=payload.image_url,
         followup_sent=False,
-        created_at=datetime.utcnow()
+        created_at=now,
+        expires_at=now + timedelta(days=15)
     )
     db.add(job)
     db.commit()
@@ -788,15 +792,43 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
     return {"message": "Vaga deletada com sucesso."}
 
 @app.patch("/api/jobs/{job_id}")
-def update_job_status(job_id: int, payload: dict, db: Session = Depends(get_db)):
+async def update_job_status(job_id: int, payload: dict, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Vaga não encontrada")
+    
+    old_status = job.status
     if "status" in payload:
         job.status = payload["status"]
+        if payload["status"] == "applied" and old_status != "applied":
+            job.applied_at = datetime.utcnow()
+            # If recruiter-posted job, notify recruiter
+            if job.source == "recruiter" and (job.recruiter_contact or job.recruiter_phone):
+                try:
+                    await notifier.dispatch_notification("candidate_applied", job, db)
+                except Exception as e:
+                    print(f"Error notifying recruiter: {e}")
+                    
     db.commit()
     db.refresh(job)
-    return {"message": "Status atualizado com sucesso.", "status": job.status}
+    return {"message": "Status updated successfully.", "status": job.status}
+
+
+@app.post("/api/jobs/{job_id}/extend", response_model=JobResponse)
+def extend_recruiter_job(job_id: int, db: Session = Depends(get_db)):
+    """Prorroga o período de vigência da vaga por mais 15 dias."""
+    from datetime import timedelta
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Vaga não encontrada")
+    
+    base_date = job.expires_at if job.expires_at else job.created_at
+    job.expires_at = base_date + timedelta(days=15)
+    db.commit()
+    db.refresh(job)
+    
+    add_log("success", f"⏳ Recrutador prorrogou a vaga '{job.title}' por mais 15 dias.")
+    return job
 
 
 @app.post("/api/jobs/clear-all")
