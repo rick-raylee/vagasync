@@ -698,10 +698,7 @@ onMounted(() => {
     document.documentElement.classList.add('light-mode');
   }
 
-  // ── Google AdSense: inicializar anúncios após DOM pronto ──
-  try {
-    (window.adsbygoogle = window.adsbygoogle || []).push({});
-  } catch (e) { /* AdSense ainda não carregado */ }
+
 });
 
 onBeforeUnmount(() => {
