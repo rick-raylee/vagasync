@@ -119,7 +119,22 @@ const fetchTransactionHistory = async () => {
   try {
     const res = await fetch(`${API_BASE}/payments/history/${userEmail}`);
     if (res.ok) {
-      transactionHistory.value = await res.json();
+      const data = await res.json();
+      transactionHistory.value = data;
+      
+      // Auto-unlock active plans based on database status
+      data.forEach(tx => {
+        if (tx.status === 'paid') {
+          if (tx.plan_name.includes('Premium') || tx.plan_name.includes('candidato_premium') || tx.plan_name.includes('Candidate Premium')) {
+            userFeatures.value.ia_ilimitada = true;
+            localStorage.setItem('vagasync_premium', 'true');
+          } else if (tx.plan_name.includes('Recrutador Pro') || tx.plan_name.includes('recruiter_pro') || tx.plan_name.includes('Recruiter Pro')) {
+            userFeatures.value.ia_triagem = true;
+            userFeatures.value.videoentrevistas = true;
+            localStorage.setItem('vagasync_recruiter_pro', 'true');
+          }
+        }
+      });
     }
   } catch (err) {
     console.error('Erro ao buscar histórico de pagamentos:', err);
@@ -1305,6 +1320,14 @@ const checkoutPaymentMethod = ref('pix');
 const checkoutCard = ref({ number: '', expiry: '', cvc: '', name: '' });
 const pixCopied = ref(false);
 const pixGeneratedData = ref(null);
+const pixPollInterval = ref(null);
+
+watch(checkoutOpen, (newVal) => {
+  if (!newVal && pixPollInterval.value) {
+    clearInterval(pixPollInterval.value);
+    pixPollInterval.value = null;
+  }
+});
 
 const checkoutTitle = ref('Upgrade Premium');
 const checkoutPrice = ref('R$ 29,90/mês');
@@ -1488,6 +1511,19 @@ const handleCheckoutPayment = async () => {
         };
         
         showToast('Pix Gerado! 🚀', 'Escaneie o QR Code ou copie a chave copia-e-cola.', 'success');
+
+        // Start real-time confirmation loop
+        if (pixPollInterval.value) clearInterval(pixPollInterval.value);
+        pixPollInterval.value = setInterval(async () => {
+          await fetchTransactionHistory();
+          const currentTx = transactionHistory.value.find(t => t.id === data.transaction_id);
+          if (currentTx && currentTx.status === 'paid') {
+            clearInterval(pixPollInterval.value);
+            pixPollInterval.value = null;
+            checkoutOpen.value = false;
+            showToast('Pagamento Confirmado! 🎉', 'O Pix foi recebido e seu plano foi liberado em tempo real.', 'success');
+          }
+        }, 3000);
       } else {
         throw new Error('Falha ao obter dados do Pix.');
       }
