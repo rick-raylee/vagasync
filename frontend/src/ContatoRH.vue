@@ -8,6 +8,8 @@ const props = defineProps({
   }
 });
 
+const emit = defineEmits(['apply-recruiter', 'start-chat']);
+
 // ── Helpers ──────────────────────────────────────────────────────
 function getStatusColor(s) {
   return { found: '#94a3b8', applying: '#3b82f6', applied: '#a855f7', contacted: '#10b981', failed: '#ef4444' }[s] || '#94a3b8';
@@ -384,15 +386,33 @@ const actionableJobs = computed(() => [...contatadas.value, ...aplicadas.value, 
                   Como enviar esta mensagem
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <a
-                    :href="job.link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
-                  >
-                    💼 Mensagem no LinkedIn
-                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
-                  </a>
+                  <template v-if="job.source === 'recruiter'">
+                    <button
+                      v-if="job.status === 'found'"
+                      @click="emit('apply-recruiter', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(16,185,129,0.12); border: 1px dashed rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer;"
+                    >
+                      <i class="fa-solid fa-file-arrow-up"></i> Enviar Currículo para Destravar Chat
+                    </button>
+                    <button
+                      v-else
+                      @click="emit('start-chat', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer; font-family: Inter, sans-serif;"
+                    >
+                      <i class="fa-solid fa-message"></i> Conversar no Chat VagaSync
+                    </button>
+                  </template>
+                  <template v-else>
+                    <a
+                      :href="job.link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
+                    >
+                      💼 Mensagem no LinkedIn
+                      <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
+                    </a>
+                  </template>
                   <a
                     v-if="job.recruiter_contact && job.recruiter_contact.includes('@')"
                     :href="`mailto:${job.recruiter_contact}?subject=Follow-up – Vaga de ${encodeURIComponent(job.title)}&body=${encodeURIComponent(getActiveMsg(job.id) === 'followup' ? buildFollowupMessage(job) : buildFirstContactMessage(job))}`"
@@ -562,15 +582,33 @@ const actionableJobs = computed(() => [...contatadas.value, ...aplicadas.value, 
                   Como enviar esta mensagem
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <a
-                    :href="job.link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
-                  >
-                    💼 Mensagem no LinkedIn
-                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
-                  </a>
+                  <template v-if="job.source === 'recruiter'">
+                    <button
+                      v-if="job.status === 'found'"
+                      @click="emit('apply-recruiter', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(16,185,129,0.12); border: 1px dashed rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer;"
+                    >
+                      <i class="fa-solid fa-file-arrow-up"></i> Enviar Currículo para Destravar Chat
+                    </button>
+                    <button
+                      v-else
+                      @click="emit('start-chat', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer; font-family: Inter, sans-serif;"
+                    >
+                      <i class="fa-solid fa-message"></i> Conversar no Chat VagaSync
+                    </button>
+                  </template>
+                  <template v-else>
+                    <a
+                      :href="job.link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
+                    >
+                      💼 Mensagem no LinkedIn
+                      <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
+                    </a>
+                  </template>
                   <a
                     v-if="job.recruiter_contact && job.recruiter_contact.includes('@')"
                     :href="`mailto:${job.recruiter_contact}?subject=Follow-up – Vaga de ${encodeURIComponent(job.title)}&body=${encodeURIComponent(getActiveMsg(job.id) === 'followup' ? buildFollowupMessage(job) : buildFirstContactMessage(job))}`"
@@ -740,15 +778,33 @@ const actionableJobs = computed(() => [...contatadas.value, ...aplicadas.value, 
                   Como enviar esta mensagem
                 </div>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <a
-                    :href="job.link"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
-                  >
-                    💼 Mensagem no LinkedIn
-                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
-                  </a>
+                  <template v-if="job.source === 'recruiter'">
+                    <button
+                      v-if="job.status === 'found'"
+                      @click="emit('apply-recruiter', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(16,185,129,0.12); border: 1px dashed rgba(16,185,129,0.3); color: #34d399; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer;"
+                    >
+                      <i class="fa-solid fa-file-arrow-up"></i> Enviar Currículo para Destravar Chat
+                    </button>
+                    <button
+                      v-else
+                      @click="emit('start-chat', job)"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; font-size: 0.78rem; font-weight: 600; transition: all 0.2s; cursor: pointer; font-family: Inter, sans-serif;"
+                    >
+                      <i class="fa-solid fa-message"></i> Conversar no Chat VagaSync
+                    </button>
+                  </template>
+                  <template v-else>
+                    <a
+                      :href="job.link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style="display: flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 8px; background: rgba(10,102,194,0.15); border: 1px solid rgba(10,102,194,0.3); color: #60a5fa; text-decoration: none; font-size: 0.78rem; font-weight: 600; transition: all 0.2s;"
+                    >
+                      💼 Mensagem no LinkedIn
+                      <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px;"></i>
+                    </a>
+                  </template>
                   <a
                     v-if="job.recruiter_contact && job.recruiter_contact.includes('@')"
                     :href="`mailto:${job.recruiter_contact}?subject=Follow-up – Vaga de ${encodeURIComponent(job.title)}&body=${encodeURIComponent(getActiveMsg(job.id) === 'followup' ? buildFollowupMessage(job) : buildFirstContactMessage(job))}`"

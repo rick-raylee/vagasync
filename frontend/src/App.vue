@@ -18,7 +18,8 @@ import {
   Globe,
   Loader,
   Map,
-  PhoneCall
+  PhoneCall,
+  Lock
 } from '@lucide/vue';
 import JobMap from './JobMap.vue';
 import ContatoRH from './ContatoRH.vue';
@@ -86,6 +87,207 @@ const toast = ref(null);
 const activeTab = ref('dashboard');
 const cookieConsent = ref(localStorage.getItem('vagasync_cookie_consent') === 'true');
 
+// ── Community Feed States ──
+const feedPosts = ref([]);
+const newPostContent = ref('');
+const commentInputs = ref({});
+const isSubmittingPost = ref(false);
+const activeCommentsPostId = ref(null);
+
+const activeConfigSubTab = ref('profile');
+
+// ── Profile and System Settings States ──
+const profileData = ref({
+  name: localStorage.getItem('vagasync_profile_name') || '',
+  email: localStorage.getItem('vagasync_profile_email') || '',
+  phone: localStorage.getItem('vagasync_profile_phone') || '',
+  company: localStorage.getItem('vagasync_profile_company') || '',
+  photo: localStorage.getItem('vagasync_profile_photo') || ''
+});
+
+const darkMode = ref(localStorage.getItem('vagasync_dark_mode') !== 'false');
+
+const systemSettings = ref({
+  soundEnabled: localStorage.getItem('vagasync_sound_enabled') === 'true',
+  autoRefresh: localStorage.getItem('vagasync_auto_refresh') === 'true',
+});
+
+const saveProfileData = () => {
+  localStorage.setItem('vagasync_profile_name', profileData.value.name);
+  localStorage.setItem('vagasync_profile_email', profileData.value.email);
+  localStorage.setItem('vagasync_profile_phone', profileData.value.phone);
+  localStorage.setItem('vagasync_profile_company', profileData.value.company);
+  localStorage.setItem('vagasync_profile_photo', profileData.value.photo);
+  showToast('Perfil Atualizado!', 'Suas informações de perfil foram salvas com sucesso.', 'success');
+};
+
+const handleProfilePhotoUpload = (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Erro de Arquivo', 'A foto de perfil deve ter no máximo 2MB.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      profileData.value.photo = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+const toggleDarkMode = () => {
+  localStorage.setItem('vagasync_dark_mode', darkMode.value);
+  if (!darkMode.value) {
+    document.documentElement.classList.add('light-mode');
+  } else {
+    document.documentElement.classList.remove('light-mode');
+  }
+};
+
+const saveSystemSettings = () => {
+  localStorage.setItem('vagasync_sound_enabled', systemSettings.value.soundEnabled);
+  localStorage.setItem('vagasync_auto_refresh', systemSettings.value.autoRefresh);
+  showToast('Configurações Salvas', 'As preferências do sistema foram atualizadas.', 'success');
+};
+
+const exportUserData = () => {
+  const data = {
+    profile: profileData.value,
+    notifications: notificationSettings.value,
+    config: config.value,
+    system: systemSettings.value
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'vagasync-meus-dados.json';
+  a.click();
+  showToast('Dados Exportados', 'Seu arquivo de exportação de dados (LGPD) foi gerado.', 'success');
+};
+
+const deleteAccount = () => {
+  if (confirm('Tem certeza absoluta que deseja deletar sua conta? Todos os seus dados serão apagados permanentemente do sistema em conformidade com o direito ao esquecimento da LGPD.')) {
+    localStorage.clear();
+    showToast('Conta Excluída', 'Seus dados foram permanentemente limpos do sistema.', 'info');
+    handleLogout();
+  }
+};
+
+const getUserEmail = () => {
+  const profileEmail = localStorage.getItem('vagasync_profile_email');
+  if (profileEmail) return profileEmail;
+  return userRole.value === 'candidate' ? 'candidato@vagasync.com.br' : 'recrutador@vagasync.com.br';
+};
+
+const getUserName = () => {
+  const profileName = localStorage.getItem('vagasync_profile_name');
+  if (profileName) return profileName;
+  return userRole.value === 'candidate' ? 'Candidato VagaSync' : 'Recrutador VagaSync';
+};
+
+const fetchFeed = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/feed`);
+    if (res.ok) {
+      feedPosts.value = await res.json();
+    }
+  } catch (err) {
+    console.error("Erro ao carregar o feed:", err);
+  }
+};
+
+// ── Recrutador IA Insights States ──
+const recruiterInsights = ref([]);
+const isLoadingRecruiterInsights = ref(false);
+
+const fetchRecruiterInsights = async () => {
+  isLoadingRecruiterInsights.value = true;
+  try {
+    const res = await fetch(`${API_BASE}/feed/recruiter-insights`);
+    if (res.ok) {
+      recruiterInsights.value = await res.json();
+    }
+  } catch (err) {
+    console.error("Erro ao carregar insights de recrutamento:", err);
+  } finally {
+    isLoadingRecruiterInsights.value = false;
+  }
+};
+
+const submitPost = async () => {
+  if (!newPostContent.value.trim()) return;
+  isSubmittingPost.value = true;
+  try {
+    const res = await fetch(`${API_BASE}/feed/post`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        author_name: getUserName(),
+        author_email: getUserEmail(),
+        author_role: userRole.value,
+        content: newPostContent.value
+      })
+    });
+    if (res.ok) {
+      newPostContent.value = '';
+      showToast('Post Compartilhado! 🚀', 'Sua publicação foi compartilhada com a comunidade VagaSync.', 'success');
+      await fetchFeed();
+    }
+  } catch (err) {
+    showToast('Erro', 'Não foi possível compartilhar sua publicação.', 'error');
+  } finally {
+    isSubmittingPost.value = false;
+  }
+};
+
+const submitComment = async (postId) => {
+  const content = commentInputs.value[postId];
+  if (!content || !content.trim()) return;
+  try {
+    const res = await fetch(`${API_BASE}/feed/post/${postId}/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        author_name: getUserName(),
+        author_email: getUserEmail(),
+        author_role: userRole.value,
+        content: content
+      })
+    });
+    if (res.ok) {
+      commentInputs.value[postId] = '';
+      showToast('Comentário Publicado!', 'Seu comentário foi postado com sucesso.', 'success');
+      await fetchFeed();
+    }
+  } catch (err) {
+    showToast('Erro', 'Não foi possível postar seu comentário.', 'error');
+  }
+};
+
+const toggleReaction = async (postId, reactionType) => {
+  try {
+    const res = await fetch(`${API_BASE}/feed/post/${postId}/react`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_email: getUserEmail(),
+        reaction_type: reactionType
+      })
+    });
+    if (res.ok) {
+      await fetchFeed();
+    }
+  } catch (err) {
+    console.error("Erro ao reagir:", err);
+  }
+};
+
+const hasUserReacted = (post, reactionType) => {
+  return post.reactions?.some(r => r.user_email === getUserEmail() && r.reaction_type === reactionType);
+};
+
 const acceptCookies = () => {
   cookieConsent.value = true;
   localStorage.setItem('vagasync_cookie_consent', 'true');
@@ -151,6 +353,85 @@ const isLoggedIn = ref(localStorage.getItem('vagasync_logged') === 'true');
 const authMode = ref('login'); // 'login' or 'signup'
 const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
 const userRole = ref(localStorage.getItem('vagasync_role') || 'candidate');
+
+// LinkedIn Connection States
+const linkedinTrigger = ref(0);
+const isLinkedinConnected = computed(() => {
+  linkedinTrigger.value;
+  const localVal = localStorage.getItem('vagasync_linkedin_connected') === 'true';
+  const cookieVal = config.value.linkedin_cookie && config.value.linkedin_cookie !== '••••••••••••••••';
+  return !!(localVal || cookieVal);
+});
+
+// ─── Trial de 7 dias para Candidatos ──────────────────────────────────────────
+const CANDIDATE_TRIAL_DAYS = 7;
+
+const candidateTrialStart = computed(() => {
+  const ts = localStorage.getItem('vagasync_candidate_trial_start');
+  return ts ? parseInt(ts) : null;
+});
+
+const candidateTrialDaysLeft = computed(() => {
+  if (userRole.value !== 'candidate') return null;
+  const start = candidateTrialStart.value;
+  if (!start) return CANDIDATE_TRIAL_DAYS;
+  const elapsed = Math.floor((Date.now() - start) / (1000 * 60 * 60 * 24));
+  return Math.max(0, CANDIDATE_TRIAL_DAYS - elapsed);
+});
+
+const candidateTrialExpired = computed(() => {
+  if (userRole.value !== 'candidate') return false;
+  if (userFeatures.value.ia_ilimitada) return false; // pagou premium
+  return candidateTrialDaysLeft.value === 0;
+});
+
+const candidateTrialPercent = computed(() => {
+  if (candidateTrialDaysLeft.value === null) return 100;
+  return Math.round((candidateTrialDaysLeft.value / CANDIDATE_TRIAL_DAYS) * 100);
+});
+
+const candidateTrialColor = computed(() => {
+  const d = candidateTrialDaysLeft.value;
+  if (d > 4) return '#10b981'; // verde
+  if (d > 2) return '#f59e0b'; // amarelo
+  return '#ef4444';             // vermelho
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Trial de 30 dias para Recrutadores ──────────────────────────────────────
+const TRIAL_DAYS = 30;
+
+const recruiterTrialStart = computed(() => {
+  const ts = localStorage.getItem('vagasync_recruiter_trial_start');
+  return ts ? parseInt(ts) : null;
+});
+
+const recruiterTrialDaysLeft = computed(() => {
+  if (userRole.value !== 'recruiter') return null;
+  const start = recruiterTrialStart.value;
+  if (!start) return TRIAL_DAYS; // nunca definido = trial completo
+  const elapsed = Math.floor((Date.now() - start) / (1000 * 60 * 60 * 24));
+  return Math.max(0, TRIAL_DAYS - elapsed);
+});
+
+const recruiterTrialExpired = computed(() => {
+  if (userRole.value !== 'recruiter') return false;
+  if (userFeatures.value.recruiter_pro_active) return false; // pagou
+  return recruiterTrialDaysLeft.value === 0;
+});
+
+const recruiterTrialPercent = computed(() => {
+  if (recruiterTrialDaysLeft.value === null) return 100;
+  return Math.round((recruiterTrialDaysLeft.value / TRIAL_DAYS) * 100);
+});
+
+const recruiterTrialColor = computed(() => {
+  const d = recruiterTrialDaysLeft.value;
+  if (d > 15) return '#10b981'; // verde
+  if (d > 7)  return '#f59e0b'; // amarelo
+  return '#ef4444';              // vermelho
+});
+// ─────────────────────────────────────────────────────────────────────────────
 const userFeatures = ref(JSON.parse(localStorage.getItem('vagasync_features')) || {
   impulsionar_vaga_credits: 0,
   empresa_destaque: false,
@@ -167,6 +448,22 @@ const userFeatures = ref(JSON.parse(localStorage.getItem('vagasync_features')) |
 watch(userFeatures, (val) => {
   localStorage.setItem('vagasync_features', JSON.stringify(val));
 }, { deep: true });
+
+// Reinicialização segura dos blocos de anúncios Google AdSense em SPAs (Vue 3)
+watch([activeTab, isLoggedIn], () => {
+  nextTick(() => {
+    try {
+      const ads = document.querySelectorAll('ins.adsbygoogle');
+      ads.forEach(ad => {
+        if (!ad.getAttribute('data-adsbygoogle-status')) {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      });
+    } catch (e) {
+      console.warn("Erro ao carregar blocos de anúncio do AdSense:", e);
+    }
+  });
+}, { immediate: true });
 
 const isPremium = computed({
   get: () => userFeatures.value.ia_ilimitada,
@@ -235,7 +532,7 @@ const saveCredentialsAndLoginReal = async () => {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/config`, {
+    const res = await fetch(`${API_BASE}/config/init-linkedin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config.value)
@@ -255,8 +552,14 @@ const saveCredentialsAndLoginReal = async () => {
 
 const handleLinkedinLogin = () => {
   if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
-    showLinkedinSimulationModal.value = true;
+    // Abrir o pop-up de autorização do LinkedIn simulado (realista e sem burocracia)
+    const width = 600;
+    const height = 700;
+    const left = (window.screen.width - width) / 2;
+    const top = (window.screen.height - height) / 2;
+    window.open('/linkedin-mock-auth.html', 'LinkedInAuth', `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`);
   } else {
+    // Credenciais OK — redirecionar para o OAuth real do LinkedIn
     window.location.href = `${API_BASE}/linkedin/login`;
   }
 };
@@ -273,6 +576,8 @@ const handleLinkedinCallback = () => {
   userRole.value = 'candidate';
   isLoggedIn.value = true;
   activeTab.value = 'dashboard';
+  localStorage.setItem('vagasync_linkedin_connected', 'true');
+  linkedinTrigger.value++;
 
   if (profileName) authForm.value.name = profileName;
   if (profileEmail) authForm.value.email = profileEmail;
@@ -313,12 +618,27 @@ const handleSignup = (e) => {
     activeTab.value = 'dashboard';
   }
 
-  showToast('Conta Criada!', `Seu perfil de ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'} foi configurado.`, 'success');
+  // Registrar início do trial conforme o papel
+  if (role === 'recruiter' && !localStorage.getItem('vagasync_recruiter_trial_start')) {
+    localStorage.setItem('vagasync_recruiter_trial_start', Date.now().toString());
+  } else if (role === 'candidate' && !localStorage.getItem('vagasync_candidate_trial_start')) {
+    localStorage.setItem('vagasync_candidate_trial_start', Date.now().toString());
+  }
+
+  // Vincular LinkedIn no cadastro de candidato
+  if (role === 'candidate' && authForm.value.linkLinkedIn) {
+    localStorage.setItem('vagasync_linkedin_connected', 'true');
+    linkedinTrigger.value++;
+  }
+
+  showToast('Conta Criada!', `Seu perfil de ${role === 'recruiter' ? 'Recrutador (30 dias grátis)' : role === 'super_admin' ? 'Administrador' : 'Candidato (7 dias grátis)'} foi configurado.`, 'success');
 };
 
 const handleLogout = () => {
   localStorage.removeItem('vagasync_logged');
   localStorage.removeItem('vagasync_role');
+  localStorage.removeItem('vagasync_linkedin_connected');
+  linkedinTrigger.value++;
   isLoggedIn.value = false;
   userRole.value = 'candidate';
   stopCamera();
@@ -384,6 +704,20 @@ onMounted(() => {
     checkAutomationStatus();
     fetchJobs();
   }, 5000);
+
+  // Load community feed and recruiter insights
+  fetchFeed();
+  fetchRecruiterInsights();
+
+  // Inicialização do Tema Light Mode/Dark Mode
+  if (localStorage.getItem('vagasync_dark_mode') === 'false') {
+    document.documentElement.classList.add('light-mode');
+  }
+
+  // ── Google AdSense: inicializar anúncios após DOM pronto ──
+  try {
+    (window.adsbygoogle = window.adsbygoogle || []).push({});
+  } catch (e) { /* AdSense ainda não carregado */ }
 });
 
 onBeforeUnmount(() => {
@@ -526,6 +860,11 @@ const deleteJob = async (jobId) => {
   }
 };
 
+const startChatWithRecruiter = (job) => {
+  activeJobIdFromNotification.value = job.id;
+  activeTab.value = 'messenger';
+};
+
 const showToast = (title, message, type = 'info', notificationType = null) => {
   toast.value = { title, message, type };
   setTimeout(() => toast.value = null, 5000);
@@ -665,7 +1004,7 @@ const employabilityScore = computed(() => {
   if (config.value.keywords && config.value.keywords.trim().length > 0) {
     score += 15;
   }
-  if (config.value.linkedin_cookie && config.value.linkedin_cookie !== '••••••••••••••••') {
+  if (isLinkedinConnected.value) {
     score += 15;
   }
   const jobCount = Array.isArray(jobs.value) ? jobs.value.length : 0;
@@ -680,7 +1019,7 @@ const employabilityScore = computed(() => {
 const employabilityFeedback = computed(() => {
   const score = employabilityScore.value;
   if (score >= 90) return 'Excelente! Seu perfil está totalmente pronto e otimizado para o mercado.';
-  if (score >= 70) return 'Muito bom! Complete seu currículo ou adicione o cookie do LinkedIn para chegar a 90+ pts.';
+  if (score >= 70) return 'Muito bom! Complete seu currículo para chegar a 90+ pts (LinkedIn já vinculado).';
   if (score >= 40) return 'Perfil em desenvolvimento. Envie seu currículo para liberar análises da IA.';
   return 'Perfil básico. Preencha as configurações e envie seu currículo para começar.';
 });
@@ -834,10 +1173,79 @@ const pixCopied = ref(false);
 const checkoutTitle = ref('Upgrade Premium');
 const checkoutPrice = ref('R$ 29,90/mês');
 
+// Helper to convert formatted price string to float value
+const getNumericPrice = (priceStr) => {
+  const clean = priceStr.replace('R$', '').replace('/mês', '').replace('/ano', '').replace('por apenas', '').trim();
+  const val = parseFloat(clean.replace('.', '').replace(',', '.'));
+  return isNaN(val) ? 29.90 : val;
+};
+
+// CRC16 CCITT False calculation for BC BR Code compliance
+const calculateCRC16 = (data) => {
+  let crc = 0xFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+};
+
+// Generates the standard static EMV BR Code string for Banco Central Pix
+const generatePixPayload = (key, amount, receiverName = 'VAGASYNC PAYMENTS', city = 'SAO PAULO') => {
+  const formattedAmount = Number(amount).toFixed(2);
+  
+  const guid = '0014br.gov.bcb.pix';
+  const keyBlock = '01' + String(key.length).padStart(2, '0') + key;
+  const merchantInfo = guid + keyBlock;
+  const block26 = '26' + String(merchantInfo.length).padStart(2, '0') + merchantInfo;
+  
+  const block52 = '52040000';
+  const block53 = '5303986';
+  const block54 = '54' + String(formattedAmount.length).padStart(2, '0') + formattedAmount;
+  const block58 = '5802BR';
+  
+  const cleanName = receiverName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 25).toUpperCase();
+  const block59 = '59' + String(cleanName.length).padStart(2, '0') + cleanName;
+  
+  const cleanCity = city.normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 15).toUpperCase();
+  const block60 = '60' + String(cleanCity.length).padStart(2, '0') + cleanCity;
+  
+  const block62 = '62070503***';
+  
+  const payloadWithoutCRC = '000201' + block26 + block52 + block53 + block54 + block58 + block59 + block60 + block62 + '6304';
+  const crc = calculateCRC16(payloadWithoutCRC);
+  
+  return payloadWithoutCRC + crc;
+};
+
+// Computed properties for QR Code and Copy and Paste Pix code
+const pixPayload = computed(() => {
+  const key = config.value.pix_key || 'ricardomarchi@outlook.com';
+  const amount = getNumericPrice(checkoutPrice.value);
+  return generatePixPayload(key, amount);
+});
+
+const pixQRCodeUrl = computed(() => {
+  return `https://chart.googleapis.com/chart?chs=250x250&cht=qr&chld=M|1&chl=${encodeURIComponent(pixPayload.value)}`;
+});
+
+const copyPixCopiaECola = () => {
+  navigator.clipboard.writeText(pixPayload.value);
+  pixCopied.value = true;
+  showToast('Copiado', 'Código Pix Copia e Cola copiado com sucesso!', 'success');
+};
+
 const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') => {
   checkoutPlan.value = plan;
   checkoutTitle.value = title;
   checkoutPrice.value = price;
+  pixCopied.value = false;
   checkoutOpen.value = true;
 };
 
@@ -1060,14 +1468,8 @@ const handleFooterClick = () => {
 };
 
 // Keyboard shortcut for owner access (Shift + O)
-onMounted(() => {
-  window.addEventListener('keydown', (e) => {
-    if (e.shiftKey && e.key === 'O' && !secretLoginOpen.value) {
-      secretLoginOpen.value = true;
-      showToast('Painel do Proprietário', 'Acesso rápido ativado via Shift+O', 'info');
-    }
-  });
-});
+// NOTE: Shift+O handler is registered in the main onMounted() to avoid duplicated onMounted() blocks.
+
 
 // Secret admin login state
 const secretLoginOpen = ref(false);
@@ -1500,6 +1902,77 @@ const sendMeetMessage = () => {
   }, 1500);
 };
 
+// Recruiter apply modal state & actions for candidate
+const showApplyRecruiterModal = ref(false);
+const selectedJobForApply = ref(null);
+
+const openApplyModal = (job) => {
+  selectedJobForApply.value = job;
+  showApplyRecruiterModal.value = true;
+};
+
+const confirmApplyToRecruiterJob = async () => {
+  if (!selectedJobForApply.value) return;
+
+  if (!config.value.resume_text || config.value.resume_text.trim().length < 10) {
+    showToast(
+      'Currículo Ausente',
+      'Você precisa preencher ou fazer upload de seu currículo na aba "Currículo & Perfil IA" para liberar a candidatura.',
+      'error'
+    );
+    activeTab.value = 'resume';
+    showApplyRecruiterModal.value = false;
+    return;
+  }
+
+  const job = selectedJobForApply.value;
+  try {
+    const res = await fetch(`${API_BASE}/jobs/${job.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: 'applied' })
+    });
+    
+    if (res.ok) {
+      const localJob = jobs.value.find(j => j.id === job.id);
+      if (localJob) {
+        localJob.status = 'applied';
+      }
+      
+      const candidateName = authForm.value.name || 'Candidato VagaSync';
+      const candidateEmail = authForm.value.email || 'candidato@vagasync.com';
+      
+      const newCandidate = {
+        id: Date.now(),
+        name: candidateName,
+        email: candidateEmail,
+        role: job.title,
+        match: job.match_score || 95,
+        status: 'recebidos',
+        resume: config.value.resume_text,
+        applied_job_id: job.id
+      };
+      
+      recruitedCandidates.value = [newCandidate, ...recruitedCandidates.value];
+      saveCandidates();
+      
+      showToast(
+        'Currículo Enviado!',
+        'Candidatura realizada com sucesso. O chat com o recrutador foi desbloqueado!',
+        'success'
+      );
+      showApplyRecruiterModal.value = false;
+    } else {
+      showToast('Erro ao Candidatar', 'Não foi possível atualizar o status da candidatura no servidor.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Erro de Conexão', 'Erro ao se conectar ao servidor.', 'error');
+  }
+};
+
 // Candidate Modal State and Actions
 const selectedCandidateForModal = ref(null);
 const showCandidateModal = ref(false);
@@ -1634,6 +2107,68 @@ const restoreCandidate = () => {
       <div class="toast-content">
         <h4>{{ toast.title }}</h4>
         <p>{{ toast.message }}</p>
+      </div>
+    </div>
+
+    <!-- Modal de Candidatura para Vaga do Recrutador -->
+    <div v-if="showApplyRecruiterModal && selectedJobForApply" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(6, 9, 19, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 1rem;">
+      <div class="glass-card" style="width: 100%; max-width: 600px; border: 1px solid rgba(16,185,129,0.3); display: flex; flex-direction: column; gap: 1.5rem; animation: modalFadeIn 0.3s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+          <div>
+            <h3 style="margin: 0; font-size: 1.25rem; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-file-signature" style="color: #34d399;"></i> Enviar Currículo para Recrutador
+            </h3>
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">
+              VagaSync Simplificada • Triagem Direta
+            </span>
+          </div>
+          <button @click="showApplyRecruiterModal = false" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+
+        <div style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.15); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+          <div style="font-size: 0.75rem; color: #34d399; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Vaga Selecionada</div>
+          <div style="font-size: 1.05rem; font-weight: 700; color: #fff;">{{ selectedJobForApply.title }}</div>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">{{ selectedJobForApply.company }} • {{ selectedJobForApply.location }}</div>
+        </div>
+
+        <!-- Currículo Text Preview -->
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between;">
+            <span>Seu Currículo Cadastrado</span>
+            <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">
+              (Será triado automaticamente pelo RH)
+            </span>
+          </div>
+          
+          <div v-if="config.resume_text && config.resume_text.trim().length >= 10" style="
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); 
+            border-radius: 8px; padding: 1rem; font-size: 0.8rem; color: var(--text-secondary); 
+            max-height: 200px; overflow-y: auto; white-space: pre-wrap; line-height: 1.6;
+          ">
+            {{ config.resume_text }}
+          </div>
+          <div v-else style="background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 1rem; text-align: center;">
+            <p style="color: #f87171; font-weight: 600; font-size: 0.85rem; margin: 0 0 0.5rem 0;">Nenhum currículo cadastrado no sistema!</p>
+            <p style="color: var(--text-secondary); font-size: 0.8rem; margin: 0 0 1rem 0;">Você precisa cadastrar seu currículo antes de prosseguir com a candidatura.</p>
+            <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 1rem;" @click="() => { showApplyRecruiterModal = false; activeTab = 'resume'; }">
+              Ir para Cadastro de Currículo
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <button class="btn btn-secondary" style="font-size: 0.85rem;" @click="showApplyRecruiterModal = false">
+            Cancelar
+          </button>
+          <button 
+            v-if="config.resume_text && config.resume_text.trim().length >= 10"
+            class="btn btn-primary" 
+            style="font-size: 0.85rem; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; font-weight: 700;" 
+            @click="confirmApplyToRecruiterJob"
+          >
+            Confirmar Candidatura
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1878,85 +2413,93 @@ const restoreCandidate = () => {
       </div>
     </div>
 
-    <!-- LinkedIn Simulation Choice Modal -->
+    <!-- LinkedIn OAuth Setup Modal -->
     <div v-if="showLinkedinSimulationModal" class="modal-overlay" style="
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
+      background: rgba(3, 5, 12, 0.97); backdrop-filter: blur(16px);
       display: flex; align-items: center; justify-content: center; z-index: 10000;
       overflow-y: auto; padding: 1rem;
     ">
-      <div class="glass-card" style="width: 460px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.3); display: flex; flex-direction: column; gap: 1.25rem; max-height: 95vh; overflow-y: auto;">
-        <div style="background: rgba(10, 102, 194, 0.1); width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
-          <Globe :size="24" style="color: #60a5fa;" />
-        </div>
-        <div style="text-align: center;">
-          <h3 style="font-size: 1.2rem; margin-bottom: 0.4rem; color: #60a5fa;">LinkedIn Desconfigurado</h3>
-          <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; text-align: justify; margin: 0;">
-            As credenciais de <strong>OAuth do LinkedIn</strong> não estão configuradas nas Configurações. Escolha o modo de testes simulado ou configure abaixo para usar o <strong>Login Real</strong>.
-          </p>
-        </div>
-
-        <!-- Opção 1: Simulação rápida -->
-        <div style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; text-align: center;">
-          <h4 style="font-size: 0.85rem; color: var(--color-secondary); margin: 0 0 0.5rem 0;">Opção de Testes Rápida (Simulação)</h4>
-          <button 
-            type="button" 
-            class="btn btn-primary" 
-            style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.55rem; width: 100%; font-size: 0.8rem;" 
-            @click="simulateLinkedinLogin(); showLinkedinSimulationModal = false;"
-          >
-            <i class="fa-solid fa-wand-magic-sparkles" style="margin-right: 4px;"></i> Simular Login (Bypass Completo)
-          </button>
-        </div>
-
-        <!-- Opção 2: Credenciais para fluxo real -->
-        <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; text-align: left; display: flex; flex-direction: column; gap: 0.85rem;">
-          <h4 style="font-size: 0.85rem; color: #fff; margin: 0; display: flex; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-key" style="color: #60a5fa;"></i> Configurar Login Real (OAuth)
-          </h4>
-          
-          <div class="form-group" style="margin: 0;">
-            <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">LinkedIn Client ID</label>
-            <input 
-              type="text" 
-              class="form-input" 
-              style="font-size: 0.8rem; padding: 0.45rem;" 
-              v-model="config.linkedin_client_id" 
-              placeholder="Digite seu Client ID do LinkedIn" 
-            />
+      <div class="glass-card" style="width: 500px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.4); display: flex; flex-direction: column; gap: 1.25rem; max-height: 95vh; overflow-y: auto; box-shadow: 0 0 60px rgba(10,102,194,0.15);">
+        
+        <!-- Header -->
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="background: linear-gradient(135deg, #0a66c2, #0077b5); width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <i class="fa-brands fa-linkedin" style="color: #fff; font-size: 1.4rem;"></i>
           </div>
-
-          <div class="form-group" style="margin: 0;">
-            <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.25rem; display: block;">LinkedIn Client Secret</label>
-            <input 
-              type="password" 
-              class="form-input" 
-              style="font-size: 0.8rem; padding: 0.45rem;" 
-              v-model="config.linkedin_client_secret" 
-              placeholder="Digite seu Client Secret do LinkedIn" 
-            />
+          <div>
+            <h3 style="font-size: 1.15rem; margin: 0; color: #fff;">Conectar com LinkedIn</h3>
+            <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 2px 0 0;">OAuth 2.0 — Login seguro e real</p>
           </div>
-
-          <button 
-            type="button" 
-            class="btn btn-primary" 
-            style="background: linear-gradient(135deg, #10b981, #34d399); border: none; color: #060913; font-weight: 700; padding: 0.6rem; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 0.25rem;" 
-            @click="saveCredentialsAndLoginReal"
-          >
-            <i class="fa-solid fa-cloud-arrow-up"></i> Salvar & Iniciar Login Real
-          </button>
         </div>
 
+        <!-- Instrução passo a passo -->
+        <div style="background: rgba(10, 102, 194, 0.08); border: 1px solid rgba(10, 102, 194, 0.2); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem;">📋 Como configurar em 3 passos:</div>
+          <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;">
+            <strong style="color:#fff;">1.</strong> Acesse
+            <a href="https://www.linkedin.com/developers/apps" target="_blank" style="color: #60a5fa; text-decoration: underline;">linkedin.com/developers/apps</a>
+            e crie ou selecione seu app.<br>
+            <strong style="color:#fff;">2.</strong> Em <em>Auth</em>, adicione esta URL de callback:<br>
+            <code style="background: rgba(0,0,0,0.4); color: #00f2fe; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; word-break: break-all;">https://vagasync.com.br/api/linkedin/callback</code><br>
+            <strong style="color:#fff;">3.</strong> Copie o <strong style="color:#fff;">Client ID</strong> e o <strong style="color:#fff;">Client Secret</strong> abaixo.
+          </div>
+        </div>
+
+        <!-- Campos OAuth -->
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">LinkedIn Client ID</label>
+          <input 
+            type="text" 
+            class="form-input" 
+            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; font-family: monospace;" 
+            v-model="config.linkedin_client_id" 
+            placeholder="Ex: 78abc123def456..."
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+          <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">LinkedIn Client Secret</label>
+          <input 
+            type="password" 
+            class="form-input" 
+            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; font-family: monospace;" 
+            v-model="config.linkedin_client_secret" 
+            placeholder="••••••••••••••••"
+            autocomplete="new-password"
+          />
+        </div>
+
+        <!-- Botão principal -->
+        <button 
+          type="button" 
+          class="btn btn-primary" 
+          style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.75rem; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px;" 
+          @click="saveCredentialsAndLoginReal"
+        >
+          <i class="fa-brands fa-linkedin"></i> Salvar e Entrar com LinkedIn
+        </button>
+
+        <!-- Divisor -->
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+          <span style="font-size: 0.72rem; color: var(--text-muted);">ou entre sem LinkedIn</span>
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+        </div>
+
+        <!-- Botão fechar / usar email -->
         <button 
           type="button" 
           class="btn btn-secondary" 
-          style="padding: 0.55rem; font-size: 0.8rem;"
+          style="padding: 0.6rem; font-size: 0.85rem;"
           @click="showLinkedinSimulationModal = false;"
         >
-          Voltar
+          Usar e-mail e senha
         </button>
       </div>
     </div>
+
 
     <!-- Checkout Modals (Stripe / Pix checkout simulation) -->
     <div v-if="checkoutOpen" class="modal-overlay" style="
@@ -1989,23 +2532,28 @@ const restoreCandidate = () => {
           </button>
         </div>
 
-        <!-- Pix Area -->
-        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1rem; border-radius: 8px;">
-          <div style="background: white; padding: 0.5rem; border-radius: 8px;">
-            <!-- Simulated QR code -->
-            <div style="width: 140px; height: 140px; background: #000; display: flex; align-items: center; justify-content: center; color: white; font-family: monospace; font-size: 0.7rem; text-align: center;">
-              [QR CODE PIX SIMULADO VAGASYNC]
-            </div>
+        <!-- Pix Area (Banco Central BR Code) -->
+        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.15);">
+          <div style="background: white; padding: 0.75rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center;">
+            <!-- Real QR Code dynamic image from Google Charts -->
+            <img 
+              :src="pixQRCodeUrl" 
+              alt="QR Code Pix Oficial Banco Central" 
+              style="width: 150px; height: 150px; display: block; object-fit: contain;" 
+            />
           </div>
-          <span style="font-size: 0.75rem; color: var(--text-secondary); text-align: center;">Mapeado para conta Pix do Proprietário configurada</span>
+          <span style="font-size: 0.75rem; color: var(--text-secondary); text-align: center; font-weight: 500;">
+            Chave Pix configurada: <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 2px 6px; border-radius: 4px;">{{ config.pix_key || 'ricardomarchi@outlook.com' }}</code>
+          </span>
           
           <button 
             type="button" 
             class="btn btn-secondary" 
-            style="font-size: 0.8rem; width: 100%;"
-            @click="pixCopied = true; showToast('Copiado', 'Código Copia e Cola copiado para a área de transferência.', 'success')"
+            style="font-size: 0.8rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;"
+            @click="copyPixCopiaECola"
           >
-            {{ pixCopied ? '✓ Copiado!' : 'Copiar Chave Copia e Cola' }}
+            <i class="fa-solid fa-copy"></i>
+            {{ pixCopied ? '✓ Copiado!' : 'Copiar Código Copia e Cola' }}
           </button>
         </div>
 
@@ -2112,7 +2660,7 @@ const restoreCandidate = () => {
         <!-- Left panel: Presentation -->
         <div class="auth-left glass-card">
           <div class="logo-container" style="margin-bottom: 1.5rem;">
-            <img src="/vagasync_logo.png" alt="Vaga Sync Logo" class="logo-icon-img" style="width: 56px; height: 56px;" />
+            <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" class="logo-icon-img" style="width: 56px; height: 56px;" />
             <span class="logo-text" style="font-size: 2.5rem;">Vaga Sync</span>
           </div>
           <p style="color: var(--text-secondary); font-size: 1.05rem; margin-bottom: 1.5rem; line-height: 1.6;">
@@ -2126,35 +2674,58 @@ const restoreCandidate = () => {
           />
 
           <div class="features-intro">
-            <h3 style="margin: 1.5rem 0 1rem 0; color: var(--color-secondary);">Como Funciona:</h3>
-            <div class="step-item">
-              <span class="step-number">1</span>
+            <h3 style="margin: 1.5rem 0 1.25rem 0; color: var(--color-secondary);">Como Funciona:</h3>
+            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                <img src="/icons/3d/login.png" style="width:34px; height:34px; object-fit:contain;" alt="LinkedIn Logo 3D" />
+              </div>
               <div>
-                <h4>Vincule seu LinkedIn</h4>
-                <p>Conecte seu perfil para puxar e analisar vagas compatíveis diretamente com suas preferências.</p>
+                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Vincule seu LinkedIn</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Conecte seu perfil para puxar e analisar vagas compatíveis diretamente com suas preferências.</p>
               </div>
             </div>
-            <div class="step-item">
-              <span class="step-number">2</span>
+            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                <img src="/icons/3d/deploy.png" style="width:34px; height:34px; object-fit:contain;" alt="Upload CV 3D" />
+              </div>
               <div>
-                <h4>Importação e Mapeamento IA</h4>
-                <p>Envie seu currículo. A IA do Gemini mapeia suas competências técnicas e alinha seu perfil.</p>
+                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Importação e Mapeamento IA</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Envie seu currículo. A IA do Gemini mapeia suas competências técnicas e alinha seu perfil.</p>
               </div>
             </div>
-            <div class="step-item">
-              <span class="step-number">3</span>
+            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                <img src="/icons/3d/briefcase.png" style="width:34px; height:34px; object-fit:contain;" alt="Briefcase 3D" />
+              </div>
               <div>
-                <h4>Agente de Candidatura</h4>
-                <p>O robô Playwright realiza candidaturas simplificadas automáticas em segundo plano.</p>
+                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Agente de Candidatura</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">O robô Playwright realiza candidaturas simplificadas automáticas em segundo plano.</p>
               </div>
             </div>
-            <div class="step-item">
-              <span class="step-number">4</span>
+            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                <img src="/icons/3d/chat.png" style="width:34px; height:34px; object-fit:contain;" alt="Chat 3D" />
+              </div>
               <div>
-                <h4>Follow-up de RH & WhatsApp</h4>
-                <p>Acompanhamento inteligente de análise do RH e alertas instantâneos no seu celular.</p>
+                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Follow-up de RH & WhatsApp</h4>
+                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Acompanhamento inteligente de análise do RH e alertas instantâneos no seu celular.</p>
               </div>
             </div>
+          </div>
+
+          <!-- ── Bloco de Anúncio AdSense (Home) ── -->
+          <div style="margin-top: 1.5rem; width: 100%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.015);">
+            <div style="padding: 0.4rem 0.75rem; background: rgba(59,130,246,0.05); border-bottom: 1px solid rgba(59,130,246,0.08); display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-rectangle-ad" style="color: rgba(148,163,184,0.4); font-size: 0.7rem;"></i>
+              <span style="font-size: 0.65rem; color: rgba(148,163,184,0.4); letter-spacing: 0.05em; text-transform: uppercase;">Publicidade</span>
+            </div>
+            <ins class="adsbygoogle"
+              style="display:block; min-height: 100px;"
+              data-ad-client="ca-pub-1405601693512304"
+              data-ad-slot="auto"
+              data-ad-format="auto"
+              data-full-width-responsive="true">
+            </ins>
           </div>
         </div>
 
@@ -2209,8 +2780,10 @@ const restoreCandidate = () => {
                 type="button" 
                 class="btn social-btn-linkedin"
                 @click="handleLinkedinLogin"
+                style="position: relative; overflow: hidden;"
               >
-                <Globe :size="18" /> Entrar com LinkedIn
+                <img src="/icons/3d/login.png" style="width: 20px; height: 20px; object-fit: contain; flex-shrink: 0;" alt="LinkedIn" />
+                Entrar com LinkedIn
               </button>
 
               <div class="divider-or">Ou use e-mail</div>
@@ -2356,7 +2929,7 @@ const restoreCandidate = () => {
       <!-- Unified Navigation Bar -->
       <header class="header">
         <div class="logo-container">
-          <img src="/vagasync_logo.png" alt="Vaga Sync Logo" class="logo-icon-img" />
+          <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" class="logo-icon-img" />
           <span class="logo-text">Vaga Sync</span>
         </div>
 
@@ -2365,7 +2938,7 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'dashboard' }]"
             @click="activeTab = 'dashboard'"
           >
-            <Briefcase :size="15" /> Painel Principal
+            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Principal
           </button>
           
           <button 
@@ -2373,7 +2946,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'map'"
             style="position: relative;"
           >
-            <Map :size="15" /> Mapa de Vagas
+            <img src="/icons/3d/map.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mapa de Vagas
             <span v-if="jobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2389,7 +2962,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'contato'"
             style="position: relative;"
           >
-            <PhoneCall :size="15" /> Contato com RH
+            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Contato com RH
             <span v-if="stats.applied > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2405,7 +2978,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <MessageSquare :size="15" /> Mensagens
+            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2420,28 +2993,35 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'resume' }]"
             @click="activeTab = 'resume'"
           >
-            <User :size="15" /> Currículo & Perfil IA
+            <img src="/icons/3d/signup.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Currículo & Perfil IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'career' }]"
             @click="activeTab = 'career'"
           >
-            <Sparkles :size="15" /> Copiloto IA
+            <img src="/icons/3d/star.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Copiloto IA
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'interview' }]"
             @click="activeTab = 'interview'"
           >
-            <Smartphone :size="15" /> Treino Entrevista
+            <img src="/icons/3d/clock.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Treino Entrevista
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
+            @click="activeTab = 'community_feed'; fetchFeed();"
+          >
+            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Feed Comunidade
           </button>
           
           <button 
             :class="['nav-link-btn', { active: activeTab === 'config' }]"
             @click="activeTab = 'config'"
           >
-            <Settings :size="15" /> Configurações
+            <img src="/icons/3d/security.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Configurações
           </button>
         </nav>
 
@@ -2450,14 +3030,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_dashboard' }]"
             @click="activeTab = 'recruiter_dashboard'"
           >
-            <Briefcase :size="15" /> Painel Recrutador
+            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Recrutador
           </button>
 
           <button 
             :class="['nav-link-btn', { active: activeTab === 'recruiter_jobs' }]"
             @click="activeTab = 'recruiter_jobs'"
           >
-            <Briefcase :size="15" /> Criar Vaga
+            <img src="/icons/3d/deploy.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Criar Vaga
           </button>
 
           <button 
@@ -2465,7 +3045,7 @@ const restoreCandidate = () => {
             @click="activeTab = 'messenger'"
             style="position: relative;"
           >
-            <MessageSquare :size="15" /> Mensagens
+            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Mensagens
             <span v-if="contactedJobs.length > 0" style="
               position: absolute; top: -4px; right: -4px;
               min-width: 16px; height: 16px; border-radius: 8px;
@@ -2480,7 +3060,14 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'recruiter_billing' }]"
             @click="activeTab = 'recruiter_billing'"
           >
-            <Settings :size="15" /> Faturamento SaaS
+            <img src="/icons/3d/store.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Faturamento SaaS
+          </button>
+
+          <button 
+            :class="['nav-link-btn', { active: activeTab === 'community_feed' }]"
+            @click="activeTab = 'community_feed'; fetchFeed();"
+          >
+            <img src="/icons/3d/chat.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Feed Comunidade
           </button>
         </nav>
 
@@ -2489,37 +3076,37 @@ const restoreCandidate = () => {
             :class="['nav-link-btn', { active: activeTab === 'super_admin' }]"
             @click="activeTab = 'super_admin'"
           >
-            <Briefcase :size="15" /> Painel Global
+            <img src="/icons/3d/briefcase.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Painel Global
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_monetization' }]"
             @click="activeTab = 'super_admin_monetization'"
           >
-            <Settings :size="15" /> Monetização
+            <img src="/icons/3d/value.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Monetização
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_gateways' }]"
             @click="activeTab = 'super_admin_gateways'"
           >
-            <Settings :size="15" /> Gateways
+            <img src="/icons/3d/store.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Gateways
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_tracking' }]"
             @click="activeTab = 'super_admin_tracking'"
           >
-            <Settings :size="15" /> Rastreamento
+            <img src="/icons/3d/map.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Rastreamento
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_content' }]"
             @click="activeTab = 'super_admin_content'"
           >
-            <Settings :size="15" /> Conteúdo
+            <img src="/icons/3d/dev.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Conteúdo
           </button>
           <button 
             :class="['nav-link-btn', { active: activeTab === 'super_admin_security' }]"
             @click="activeTab = 'super_admin_security'"
           >
-            <Settings :size="15" /> Segurança
+            <img src="/icons/3d/security.png" style="width: 14px; height: 14px; object-fit: contain; margin-right: 6px; flex-shrink: 0;" /> Segurança
           </button>
         </nav>
         
@@ -2687,7 +3274,50 @@ const restoreCandidate = () => {
       <!-- Main Content Tabs -->
       <main style="padding-bottom: 2rem;">
         <template v-if="activeTab === 'dashboard'">
-          <!-- Agent Live Status Banner -->
+          <!-- ── PAYWALL OVERLAY: Trial Candidato Expirado ── -->
+          <div v-if="candidateTrialExpired" style="position: absolute; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(6, 9, 19, 0.96); backdrop-filter: blur(15px); padding: 2rem; border-radius: 12px; min-height: 600px;">
+            <div style="max-width: 500px; text-align: center; border: 1.5px solid rgba(59, 130, 246, 0.35); background: rgba(13, 20, 38, 0.85); padding: 3rem 2rem; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); position: relative;">
+              <img src="/icons/3d/security.png" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 1.5rem; filter: drop-shadow(0 0 20px rgba(59,130,246,0.4));" alt="Bloqueado" />
+              <h2 style="color: #fff; font-size: 1.8rem; margin: 0 0 0.5rem;">Período de Teste de Candidato Encerrado</h2>
+              <p style="color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 2rem; line-height: 1.6;">
+                Seu trial gratuito de <strong style="color: #fff;">7 dias</strong> chegou ao fim. Assine o plano <strong style="color: #00f2fe;">VagaSync Premium</strong> para continuar acessando o painel de candidaturas por IA, treinador de entrevistas e WebRTC.
+              </p>
+              
+              <div style="background: linear-gradient(135deg, rgba(0,242,254,0.08), rgba(59,130,246,0.12)); border: 1.5px solid rgba(0,242,254,0.35); border-radius: 14px; padding: 1.5rem 1.25rem; text-align: left; position: relative; margin-bottom: 1.5rem;">
+                <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: linear-gradient(90deg, #00f2fe, #3b82f6); color: #fff; font-size: 0.65rem; font-weight: 700; padding: 3px 12px; border-radius: 20px; letter-spacing: 0.05em; box-shadow: 0 4px 10px rgba(0, 242, 254, 0.25);">RECOMENDADO</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                  <div style="font-size: 0.75rem; color: #00f2fe; text-transform: uppercase; letter-spacing: 0.05em;">Plano Premium</div>
+                  <img src="/icons/3d/value.png" style="width: 32px; height: 32px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,242,254,0.15));" alt="Premium Diamond 3D" />
+                </div>
+                <div style="font-size: 2rem; font-weight: 800; color: #fff;">R$ 29,90<span style="font-size: 1rem; font-weight: 400; color: var(--text-secondary);">/mês</span></div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.5;">Varreduras e candidaturas ilimitadas<br>IA Gemini com match inteligente<br>Treino de entrevistas ilimitado<br>Mensagens com RH e suporte</div>
+                <button @click="openCheckout('candidate_premium', 'Assinatura VagaSync Premium', 'R$ 29,90/mês')" class="btn btn-primary" style="width: 100%; margin-top: 1rem; font-size: 0.85rem; background: linear-gradient(90deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;">Assinar Premium</button>
+              </div>
+              <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;">Pague via Pix ou Cartão - Cancele quando quiser</p>
+            </div>
+          </div>
+            <!-- ── Banner Trial Candidato Ativo ── -->
+            <div v-if="candidateTrialDaysLeft !== null && !userFeatures.ia_ilimitada" style="border-radius: 14px; overflow: hidden; border: 1px solid var(--color-primary); background: rgba(255,255,255,0.03); padding: 0; margin-bottom: 1.5rem;">
+              <div style="background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent); padding: 0.75rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <img src="/icons/3d/clock.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));" alt="Timer 3D" />
+                  <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: #fff;">Período de Teste Gratuito de Candidato</div>
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 1px;">
+                      Você tem <span style="color: var(--color-primary); font-weight: 700;">{{ candidateTrialDaysLeft }} dia{{ candidateTrialDaysLeft !== 1 ? 's' : '' }}</span> restante{{ candidateTrialDaysLeft !== 1 ? 's' : '' }} de {{ CANDIDATE_TRIAL_DAYS }} dias grátis. Aproveite para testar a IA de envio automatizado!
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-primary" style="font-size: 0.8rem; padding: 0.4rem 1.25rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; border: none; font-weight: 700;" @click="openCheckout('candidate_premium', 'Assinatura VagaSync Premium', 'R$ 29,90/mês')">
+                  <i class="fa-solid fa-gem" style="margin-right: 4px;"></i> Assinar Premium (R$ 29,90)
+                </button>
+              </div>
+              <div style="height: 3px; background: rgba(255,255,255,0.06); width: 100%;">
+                <div :style="{ width: candidateTrialPercent + '%', height: '100%', background: candidateTrialColor, borderRadius: '3px', transition: 'width 0.5s ease' }"></div>
+              </div>
+            </div>
+
+            <!-- Agent Live Status Banner -->
           <div v-if="isAutomationRunning" class="agent-status-bar">
             <div class="agent-status-left">
               <div class="agent-spinner">
@@ -2737,34 +3367,49 @@ const restoreCandidate = () => {
 
           <!-- Stats Metrics Row -->
           <div class="stats-row">
-            <div class="glass-card stat-card">
-              <div class="stat-icon"><Briefcase :size="22" /></div>
+            <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/briefcase.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Vagas" /></div>
               <div>
                 <div class="stat-value">{{ stats.total }}</div>
                 <div class="stat-label">Vagas Encontradas</div>
               </div>
             </div>
-            <div class="glass-card stat-card">
-              <div class="stat-icon"><CheckCircle :size="22" style="color: #a855f7;" /></div>
+            <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/check.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Candidaturas" /></div>
               <div>
                 <div class="stat-value">{{ stats.applied }}</div>
                 <div class="stat-label">Candidaturas</div>
               </div>
             </div>
-            <div class="glass-card stat-card">
-              <div class="stat-icon"><Sparkles :size="22" style="color: #00f2fe;" /></div>
+            <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/star.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Match Médio IA" /></div>
               <div>
                 <div class="stat-value">{{ stats.averageMatch }}%</div>
                 <div class="stat-label">Match Médio IA</div>
               </div>
             </div>
-            <div class="glass-card stat-card">
-              <div class="stat-icon"><MessageSquare :size="22" style="color: #10b981;" /></div>
+            <div class="glass-card stat-card" style="transition: transform 0.3s ease; cursor: default;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+              <div class="stat-icon" style="background: rgba(255, 255, 255, 0.02); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.15) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'"><img src="/icons/3d/chat.png" style="width: 32px; height: 32px; object-fit: contain;" alt="Mensagens" /></div>
               <div>
                 <div class="stat-value">{{ stats.contacted }}</div>
                 <div class="stat-label">Retornos de RH</div>
               </div>
             </div>
+          </div>
+
+          <!-- ── Bloco de Anúncio AdSense (Painel Candidato) ── -->
+          <div v-if="userRole === 'candidate'" style="width: 100%; margin: 0.25rem 0 0.75rem; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.015);">
+            <div style="padding: 0.35rem 0.75rem; background: rgba(59,130,246,0.05); border-bottom: 1px solid rgba(59,130,246,0.08); display: flex; align-items: center; gap: 0.4rem;">
+              <i class="fa-solid fa-rectangle-ad" style="color: rgba(148,163,184,0.4); font-size: 0.65rem;"></i>
+              <span style="font-size: 0.6rem; color: rgba(148,163,184,0.35); letter-spacing: 0.05em; text-transform: uppercase;">Publicidade</span>
+            </div>
+            <ins class="adsbygoogle"
+              style="display:block; min-height: 90px;"
+              data-ad-client="ca-pub-1405601693512304"
+              data-ad-slot="auto"
+              data-ad-format="auto"
+              data-full-width-responsive="true">
+            </ins>
           </div>
 
           <!-- Main Dashboard Panel -->
@@ -2796,18 +3441,28 @@ const restoreCandidate = () => {
                     <tr v-for="job in jobs" :key="job.id">
                       <td>
                         <div class="job-name-cell">
-                          <a 
-                            :href="job.link" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style="color: var(--text-primary); font-weight: 600; text-decoration: none;"
+                          <button
+                            class="link-like-btn"
+                            type="button"
+                            @click="() => {
+                              if (job.source === 'recruiter') {
+                                if (job.status === 'found') {
+                                  openApplyModal(job);
+                                } else {
+                                  showToast('Candidatura Concluída', 'Você já enviou seu currículo para esta vaga. O chat está liberado!', 'success');
+                                }
+                              } else {
+                                window.open(job.link, '_blank');
+                              }
+                            }"
+                            style="color: var(--text-primary); font-weight: 600; text-decoration: none; background: transparent; border: none; padding: 0; cursor: pointer;"
                           >
                             {{ job.title }}
-                          </a>
+                          </button>
                           <span class="job-company">
                             {{ job.company }} • {{ job.location || 'Sem local' }} • 
-                            <span :class="['source-badge', job.source === 'linkedin' ? 'linkedin' : 'web']">
-                              {{ job.source === 'linkedin' ? 'LinkedIn' : `Gemini ${job.source || 'Web'}` }}
+                            <span :class="['source-badge', job.source === 'linkedin' ? 'linkedin' : 'web']" :style="job.source === 'recruiter' ? 'background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #34d399;' : undefined">
+                              {{ job.source === 'linkedin' ? 'LinkedIn' : job.source === 'recruiter' ? 'VagaSync' : `Gemini ${job.source || 'Web'}` }}
                             </span>
                           </span>
                         </div>
@@ -2835,7 +3490,38 @@ const restoreCandidate = () => {
                         </span>
                       </td>
                       <td>
-                        <div style="display: flex; gap: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                          <!-- Se for vaga do Recrutador e ainda não candidatou -->
+                          <button
+                            v-if="job.source === 'recruiter' && job.status === 'found'"
+                            class="btn btn-primary"
+                            style="padding: 0.25rem 0.5rem; font-size: 0.72rem; display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; font-weight: 700;"
+                            @click="openApplyModal(job)"
+                          >
+                            <i class="fa-solid fa-file-arrow-up" style="font-size: 11px;"></i> Enviar Currículo
+                          </button>
+                          
+                          <!-- Caso contrário (vaga externa ou vaga do Recrutador já candidata) -->
+                          <template v-else>
+                            <button 
+                              v-if="job.status === 'applied' || job.status === 'contacted'"
+                              class="btn btn-primary" 
+                              style="padding: 0.25rem 0.5rem; font-size: 0.72rem; display: flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; border: none; font-weight: 700;"
+                              @click="startChatWithRecruiter(job)"
+                            >
+                              <MessageSquare :size="12" /> Falar com RH
+                            </button>
+                            <button 
+                              v-else
+                              class="btn btn-secondary" 
+                              style="padding: 0.25rem 0.5rem; font-size: 0.72rem; display: flex; align-items: center; gap: 4px; opacity: 0.45; cursor: not-allowed;"
+                              title="Você só pode enviar mensagens após concluir a candidatura."
+                              disabled
+                            >
+                              <Lock :size="12" /> Falar com RH
+                            </button>
+                          </template>
+                          
                           <button 
                             class="btn btn-secondary" 
                             style="padding: 0.25rem; min-width: 30px; color: var(--color-error);"
@@ -2874,7 +3560,7 @@ const restoreCandidate = () => {
                   <span class="log-timestamp">[{{ new Date(log.timestamp).toLocaleTimeString() }}]</span>
                   <span :class="`log-level-${log.level}`">{{ log.message }}</span>
                 </div>
-                <div ref="terminalEndRef" />
+                <div ref="terminalEndRef"></div>
               </div>
               
               <div style="margin-top: auto; padding-top: 1rem; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #142036;">
@@ -2915,9 +3601,26 @@ const restoreCandidate = () => {
                     :style="{ width: `${employabilityScore}%` }"
                   ></div>
                 </div>
-                <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
-                  💡 <strong>Feedback da IA:</strong> {{ employabilityFeedback }}
-                </p>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.75rem;">
+                  <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; margin: 0; flex: 1;">
+                    💡 <strong>Feedback da IA:</strong> {{ employabilityFeedback }}
+                  </p>
+                  <div 
+                    v-if="isLinkedinConnected"
+                    style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #34d399; font-size: 0.72rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px;"
+                  >
+                    <i class="fa-brands fa-linkedin" style="font-size: 0.85rem;"></i> LinkedIn Vinculado
+                  </div>
+                  <button 
+                    v-else
+                    @click="handleLinkedinLogin"
+                    style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-size: 0.72rem; font-weight: 700; padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.05)'"
+                    onmouseout="this.style.transform='scale(1)'"
+                  >
+                    <i class="fa-brands fa-linkedin" style="font-size: 0.85rem;"></i> Vincular LinkedIn
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3197,6 +3900,247 @@ const restoreCandidate = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </template>
+
+        <!-- ── Aba Feed da Comunidade (Candidatos, Recrutadores e Agente IA) ── -->
+        <template v-if="activeTab === 'community_feed'">
+          <div style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <!-- Introdução do Feed -->
+            <div class="glass-card" style="padding: 1.5rem; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(0, 242, 254, 0.2); background: linear-gradient(135deg, rgba(10, 15, 28, 0.9), rgba(0, 242, 254, 0.05));">
+              <div>
+                <h2 style="margin: 0 0 0.5rem 0; font-size: 1.5rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-users" style="color: var(--color-secondary);"></i> Comunidade VagaSync
+                </h2>
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+                  Compartilhe dicas de carreira, insights de tecnologia e interaja com recrutadores, outros candidatos e nosso <strong>Agente de Recrutamento IA</strong> autônomo.
+                </p>
+              </div>
+              <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.5rem 1rem; border-color: rgba(255,255,255,0.15);" @click="fetchFeed">
+                <i class="fa-solid fa-rotate" style="margin-right: 4px;"></i> Atualizar Feed
+              </button>
+            </div>
+
+            <!-- Caixa de Criação de Post -->
+            <div class="glass-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid rgba(255, 255, 255, 0.1);">
+              <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                <!-- Avatar -->
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #060913; font-weight: 700; flex-shrink: 0; box-shadow: 0 0 10px rgba(0, 242, 254, 0.3);">
+                  {{ userRole === 'candidate' ? 'C' : 'R' }}
+                </div>
+                <div style="flex: 1;">
+                  <textarea 
+                    class="form-input" 
+                    rows="3" 
+                    v-model="newPostContent" 
+                    placeholder="No que você está pensando hoje? Compartilhe um insight de carreira ou tech..." 
+                    style="resize: none; background: rgba(5, 7, 15, 0.6); font-size: 0.88rem; width: 100%;"
+                  ></textarea>
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; align-items: center; gap: 1rem;">
+                <span style="font-size: 0.75rem; color: var(--text-muted);">
+                  Seu post será lido e poderá receber comentários instantâneos do Agente IA 🤖
+                </span>
+                <button 
+                  class="btn btn-primary" 
+                  style="font-size: 0.8rem; padding: 0.5rem 1.5rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                  :disabled="isSubmittingPost || !newPostContent.trim()" 
+                  @click="submitPost"
+                >
+                  <i class="fa-solid fa-paper-plane" style="margin-right: 4px;"></i>
+                  {{ isSubmittingPost ? 'Publicando...' : 'Publicar' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Listagem de Posts -->
+            <div v-if="feedPosts.length === 0" style="text-align: center; padding: 4rem 0; color: var(--text-secondary);">
+              <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--color-secondary); margin-bottom: 1rem;"></i>
+              <p>Carregando as postagens da comunidade...</p>
+            </div>
+
+            <div v-else style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <div 
+                v-for="post in feedPosts" 
+                :key="post.id" 
+                class="glass-card" 
+                style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid rgba(255,255,255,0.06); transition: transform 0.2s ease, border-color 0.2s;"
+                onmouseover="this.style.borderColor='rgba(0, 242, 254, 0.15)'"
+                onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'"
+              >
+                <!-- Header do Post -->
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <!-- Avatar baseado no papel -->
+                    <div 
+                      style="width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0;"
+                      :style="post.author_role === 'ai_agent' 
+                        ? 'background: rgba(0, 242, 254, 0.12); border: 2px solid #00f2fe; color: #00f2fe; box-shadow: 0 0 10px rgba(0,242,254,0.2);' 
+                        : post.author_role === 'recruiter'
+                        ? 'background: rgba(168, 85, 247, 0.12); border: 2px solid #a855f7; color: #a855f7;'
+                        : 'background: rgba(59, 130, 246, 0.12); border: 2px solid #3b82f6; color: #3b82f6;'"
+                    >
+                      <i v-if="post.author_role === 'ai_agent'" class="fa-solid fa-robot"></i>
+                      <i v-else-if="post.author_role === 'recruiter'" class="fa-solid fa-user-tie"></i>
+                      <i v-else class="fa-solid fa-user-ninja"></i>
+                    </div>
+                    
+                    <div>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-weight: 700; color: #fff; font-size: 0.92rem;">{{ post.author_name }}</span>
+                        <!-- Badges -->
+                        <span 
+                          v-if="post.author_role === 'ai_agent'" 
+                          style="font-size: 0.58rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(0, 242, 254, 0.15); border: 1px solid rgba(0, 242, 254, 0.3); color: #00f2fe; text-transform: uppercase; letter-spacing: 0.05em;"
+                        >
+                          IA AGENTE
+                        </span>
+                        <span 
+                          v-else-if="post.author_role === 'recruiter'" 
+                          style="font-size: 0.58rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; text-transform: uppercase; letter-spacing: 0.05em;"
+                        >
+                          RECRUTADOR
+                        </span>
+                        <span 
+                          v-else 
+                          style="font-size: 0.58rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; text-transform: uppercase; letter-spacing: 0.05em;"
+                        >
+                          CANDIDATO
+                        </span>
+                      </div>
+                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+                        {{ new Date(post.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Conteúdo do Post -->
+                <div style="font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; word-break: break-word;">
+                  {{ post.content }}
+                </div>
+
+                <!-- Footer do Post: Reações e Botão Comentar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0; margin-top: 0.5rem;">
+                  <!-- Reações -->
+                  <div style="display: flex; gap: 0.25rem;">
+                    <!-- Like -->
+                    <button 
+                      class="nav-link-btn" 
+                      style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; gap: 4px;"
+                      :style="hasUserReacted(post, 'like') ? 'background: rgba(0, 242, 254, 0.1); border-color: rgba(0, 242, 254, 0.2); color: #00f2fe;' : 'background: transparent; color: var(--text-secondary);'"
+                      @click="toggleReaction(post.id, 'like')"
+                    >
+                      👍 <span style="font-weight: 600;">{{ post.likes }}</span>
+                    </button>
+                    <!-- Clap -->
+                    <button 
+                      class="nav-link-btn" 
+                      style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; gap: 4px;"
+                      :style="hasUserReacted(post, 'clap') ? 'background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.2); color: #c084fc;' : 'background: transparent; color: var(--text-secondary);'"
+                      @click="toggleReaction(post.id, 'clap')"
+                    >
+                      👏 <span style="font-weight: 600;">{{ post.claps }}</span>
+                    </button>
+                    <!-- Love -->
+                    <button 
+                      class="nav-link-btn" 
+                      style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; gap: 4px;"
+                      :style="hasUserReacted(post, 'love') ? 'background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); color: #f87171;' : 'background: transparent; color: var(--text-secondary);'"
+                      @click="toggleReaction(post.id, 'love')"
+                    >
+                      ❤️ <span style="font-weight: 600;">{{ post.loves }}</span>
+                    </button>
+                    <!-- Idea -->
+                    <button 
+                      class="nav-link-btn" 
+                      style="font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; gap: 4px;"
+                      :style="hasUserReacted(post, 'idea') ? 'background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #fbbf24;' : 'background: transparent; color: var(--text-secondary);'"
+                      @click="toggleReaction(post.id, 'idea')"
+                    >
+                      💡 <span style="font-weight: 600;">{{ post.ideas }}</span>
+                    </button>
+                  </div>
+
+                  <!-- Botão Comentários -->
+                  <button 
+                    class="nav-link-btn" 
+                    style="font-size: 0.78rem; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); padding: 4px 10px;"
+                    @click="activeCommentsPostId = activeCommentsPostId === post.id ? null : post.id"
+                  >
+                    <i class="fa-regular fa-comment" :style="activeCommentsPostId === post.id ? 'color: #00f2fe;' : ''"></i>
+                    <span>{{ post.comments?.length || 0 }} Comentários</span>
+                  </button>
+                </div>
+
+                <!-- Área de Comentários (Expansível) -->
+                <div v-if="activeCommentsPostId === post.id" style="display: flex; flex-direction: column; gap: 1rem; padding: 0.25rem 0.5rem 0.5rem;">
+                  <!-- Campo de escrita de comentário -->
+                  <div style="display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.5rem;">
+                    <input 
+                      type="text" 
+                      class="form-input" 
+                      placeholder="Adicione um comentário profissional..." 
+                      v-model="commentInputs[post.id]"
+                      style="font-size: 0.8rem; background: rgba(5, 7, 15, 0.6); flex: 1; height: 36px;"
+                      @keyup.enter="submitComment(post.id)"
+                    />
+                    <button 
+                      class="btn btn-secondary" 
+                      style="font-size: 0.75rem; height: 36px; padding: 0 1rem; border-color: rgba(255,255,255,0.15);"
+                      @click="submitComment(post.id)"
+                    >
+                      Enviar
+                    </button>
+                  </div>
+
+                  <!-- Lista de Comentários -->
+                  <div v-if="!post.comments || post.comments.length === 0" style="text-align: center; padding: 1rem 0; font-size: 0.78rem; color: var(--text-muted);">
+                    Nenhum comentário publicado ainda. Seja o primeiro!
+                  </div>
+
+                  <div v-else style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div 
+                      v-for="comment in post.comments" 
+                      :key="comment.id" 
+                      style="background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; padding: 0.75rem;"
+                    >
+                      <!-- Header Comentário -->
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                          <span style="font-weight: 700; color: #fff; font-size: 0.8rem;">{{ comment.author_name }}</span>
+                          <!-- Badges -->
+                          <span 
+                            v-if="comment.author_role === 'ai_agent'" 
+                            style="font-size: 0.5rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; background: rgba(0, 242, 254, 0.15); border: 1px solid rgba(0, 242, 254, 0.3); color: #00f2fe;"
+                          >
+                            IA AGENTE
+                          </span>
+                          <span 
+                            v-else-if="comment.author_role === 'recruiter'" 
+                            style="font-size: 0.5rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.2); color: #c084fc;"
+                          >
+                            RECRUTADOR
+                          </span>
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">
+                          {{ new Date(comment.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) }}
+                        </span>
+                      </div>
+                      <!-- Conteúdo Comentário -->
+                      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap; word-break: break-word;">
+                        {{ comment.content }}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
           </div>
         </template>
 
@@ -3681,6 +4625,64 @@ const restoreCandidate = () => {
         <!-- ── Aba Recrutador Dashboard (Recrutador) ── -->
         <template v-if="activeTab === 'recruiter_dashboard'">
           <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+
+            <!-- ── PAYWALL: Trial Expirado ── -->
+            <div v-if="recruiterTrialExpired" style="position: relative; border-radius: 20px; overflow: hidden; background: linear-gradient(135deg, #0a0f1c 0%, #0d1426 100%); border: 2px solid rgba(239,68,68,0.4); padding: 3rem 2rem; text-align: center;">
+              <div style="position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(239,68,68,0.08) 0%, transparent 70%); pointer-events: none;"></div>
+              <img src="/icons/3d/security.png" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 1rem; filter: drop-shadow(0 0 20px rgba(239,68,68,0.4));" alt="Bloqueado" />
+              <h2 style="color: #fff; font-size: 1.8rem; margin: 0 0 0.5rem;">Periodo de Teste Encerrado</h2>
+              <p style="color: var(--text-secondary); font-size: 1rem; max-width: 480px; margin: 0 auto 2rem; line-height: 1.6;">
+                Seu trial gratuito de <strong style="color: #fff;">30 dias</strong> chegou ao fim. Assine o plano <strong style="color: #00f2fe;">VagaSync Pro Recrutador</strong> para continuar acessando o painel, Kanban, IA de triagem e automacoes de WhatsApp.
+              </p>
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <div style="background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 14px; padding: 1.5rem 1.25rem; min-width: 200px; text-align: left; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Plano Starter</div>
+                    <img src="/icons/3d/store.png" style="width: 32px; height: 32px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));" alt="Starter Store 3D" />
+                  </div>
+                  <div style="font-size: 2rem; font-weight: 800; color: #fff;">R$ 49<span style="font-size: 1rem; font-weight: 400; color: var(--text-secondary);">/mes</span></div>
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.5;">Kanban completo<br>3 vagas ativas<br>WhatsApp manual</div>
+                  <button @click="openCheckout('recruiter_starter', 'Plano Starter Recrutador', 'R$ 49,90/mes')" class="btn btn-secondary" style="width: 100%; margin-top: 1rem; font-size: 0.85rem;">Assinar Starter</button>
+                </div>
+                <div style="background: linear-gradient(135deg, rgba(0,242,254,0.08), rgba(59,130,246,0.12)); border: 1.5px solid rgba(0,242,254,0.35); border-radius: 14px; padding: 1.5rem 1.25rem; min-width: 200px; text-align: left; position: relative; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+                  <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: linear-gradient(90deg, #00f2fe, #3b82f6); color: #fff; font-size: 0.65rem; font-weight: 700; padding: 3px 12px; border-radius: 20px; letter-spacing: 0.05em; box-shadow: 0 4px 10px rgba(0, 242, 254, 0.25);">MAIS POPULAR</div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="font-size: 0.75rem; color: #00f2fe; text-transform: uppercase; letter-spacing: 0.05em;">Plano Pro</div>
+                    <img src="/icons/3d/value.png" style="width: 32px; height: 32px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,242,254,0.15));" alt="Pro Diamond 3D" />
+                  </div>
+                  <div style="font-size: 2rem; font-weight: 800; color: #fff;">R$ 99<span style="font-size: 1rem; font-weight: 400; color: var(--text-secondary);">/mes</span></div>
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.5;">Vagas ilimitadas<br>IA de triagem<br>WhatsApp automatico<br>Relatorios premium</div>
+                  <button @click="openCheckout('recruiter_pro', 'Plano Pro Recrutador', 'R$ 99,90/mes')" class="btn btn-primary" style="width: 100%; margin-top: 1rem; font-size: 0.85rem; background: linear-gradient(90deg, #00f2fe, #3b82f6);">Assinar Pro</button>
+                </div>
+              </div>
+              <p style="margin-top: 2rem; font-size: 0.75rem; color: var(--text-muted);">Pague via Pix ou Cartao - Cancele quando quiser - Suporte em ate 24h</p>
+            </div>
+
+            <!-- ── Banner Trial Ativo ── -->
+            <div v-else-if="recruiterTrialDaysLeft !== null && !userFeatures.recruiter_pro_active" :style="{ borderRadius: '14px', overflow: 'hidden', border: '1px solid ' + recruiterTrialColor, background: 'rgba(255,255,255,0.03)', padding: '0' }">
+              <div :style="{ background: 'linear-gradient(90deg, ' + recruiterTrialColor + '15, transparent)', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <img src="/icons/3d/clock.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));" alt="Timer 3D" />
+                  <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: #fff;">Periodo de Teste Gratuito</div>
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 1px;">
+                      <span :style="{ color: recruiterTrialColor, fontWeight: 700 }">{{ recruiterTrialDaysLeft }} dia{{ recruiterTrialDaysLeft !== 1 ? 's' : '' }}</span>
+                      restante{{ recruiterTrialDaysLeft !== 1 ? 's' : '' }} de {{ TRIAL_DAYS }} dias gratis
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem; flex: 1; justify-content: flex-end;">
+                  <!-- Barra de progresso -->
+                  <div style="flex: 1; max-width: 180px; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;">
+                    <div :style="{ width: recruiterTrialPercent + '%', height: '100%', background: recruiterTrialColor, borderRadius: '3px', transition: 'width 0.5s ease' }"></div>
+                  </div>
+                  <button @click="openCheckout('recruiter_pro', 'Plano Pro Recrutador', 'R$ 99,90/mes')" class="btn btn-primary" style="font-size: 0.78rem; padding: 0.4rem 1rem; white-space: nowrap; background: linear-gradient(90deg, #00f2fe, #3b82f6);">
+                    Assinar Agora
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Filtros de Desempenho -->
             <div class="glass-card" style="display: flex; flex-direction: column; gap: 1rem; border-color: rgba(59,130,246,0.25);">
               <div style="display: flex; align-items: center; gap: 8px;">
@@ -3712,10 +4714,10 @@ const restoreCandidate = () => {
             <!-- Principais Indicadores (Gestão de Vagas, SLA, Experiência) -->
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem;">
               <!-- Gestão de Vagas -->
-              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Gestão de Vagas</span>
-                  <i class="fa-solid fa-folder-open" style="color: var(--color-primary);"></i>
+                  <img src="/icons/3d/briefcase.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Vagas 3D" />
                 </div>
                 <div style="display: flex; gap: 0.8rem; margin-top: 0.25rem; font-size: 0.82rem; width: 100%;">
                   <div style="flex: 1; text-align: center; background: rgba(59,130,246,0.1); padding: 4px; border-radius: 4px; border: 1px solid rgba(59,130,246,0.25);">
@@ -3734,10 +4736,10 @@ const restoreCandidate = () => {
               </div>
 
               <!-- SLA de Contratação -->
-              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">SLA Médio</span>
-                  <i class="fa-solid fa-hourglass-half" style="color: #f59e0b;"></i>
+                  <img src="/icons/3d/clock.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Relógio 3D" />
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: #f59e0b; font-weight: 800;">{{ dashboardMetrics.sla }}</span>
@@ -3749,10 +4751,10 @@ const restoreCandidate = () => {
               </div>
 
               <!-- Satisfação Candidato (NPS) -->
-              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Satisfação (NPS)</span>
-                  <i class="fa-solid fa-heart" style="color: #ec4899;"></i>
+                  <img src="/icons/3d/star.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Estrela 3D" />
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: #ec4899; font-weight: 800;">{{ dashboardMetrics.nps }}%</span>
@@ -3763,10 +4765,10 @@ const restoreCandidate = () => {
               </div>
 
               <!-- Velocidade de Resposta -->
-              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px;">
+              <div class="glass-card stat-card" style="flex-direction: column; align-items: flex-start; gap: 0.5rem; justify-content: center; min-height: 100px; transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
                 <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
                   <span class="stat-label" style="font-weight: 700; color: #fff;">Tempo de Resposta</span>
-                  <i class="fa-solid fa-reply-all" style="color: var(--color-secondary);"></i>
+                  <img src="/icons/3d/chat.png" style="width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15)); transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.2) rotate(5deg)'" onmouseout="this.style.transform='scale(1) rotate(0)'" alt="Chat 3D" />
                 </div>
                 <div style="display: flex; align-items: baseline; gap: 6px;">
                   <span class="stat-value" style="font-size: 1.8rem; color: var(--color-secondary); font-weight: 800;">{{ dashboardMetrics.responseTime }}</span>
@@ -3774,6 +4776,67 @@ const restoreCandidate = () => {
                 </div>
                 <div style="font-size: 0.68rem; color: var(--color-secondary); font-weight: 600; display: flex; align-items: center; gap: 3px;">
                   <i class="fa-solid fa-bolt"></i> Super Rápido
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Radar de Insights e Notícias IA para RH ── -->
+            <div class="glass-card" style="padding: 1.5rem; border: 1px solid rgba(0, 242, 254, 0.2); background: linear-gradient(135deg, rgba(10, 15, 28, 0.9), rgba(0, 242, 254, 0.03)); display: flex; flex-direction: column; gap: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-brain" style="color: #00f2fe;"></i> Radar de Insights & Notícias IA para RH
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">
+                    Personalizado com base nas suas vagas ativas
+                  </span>
+                  <button 
+                    class="btn btn-secondary" 
+                    style="font-size: 0.72rem; padding: 0.35rem 0.75rem; display: flex; align-items: center; gap: 4px; border-color: rgba(255,255,255,0.15);"
+                    :disabled="isLoadingRecruiterInsights"
+                    @click="fetchRecruiterInsights"
+                  >
+                    <i class="fa-solid fa-rotate" :class="{'fa-spin': isLoadingRecruiterInsights}"></i>
+                    {{ isLoadingRecruiterInsights ? 'Atualizando...' : 'Regerar IA' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Lista de Insights -->
+              <div v-if="recruiterInsights.length === 0" style="text-align: center; padding: 2rem 0; color: var(--text-secondary);">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--color-secondary); margin-bottom: 0.75rem;"></i>
+                <p style="font-size: 0.8rem; margin: 0;">Analisando suas vagas e gerando notícias de mercado por IA...</p>
+              </div>
+
+              <div v-else style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                <div 
+                  v-for="insight in recruiterInsights" 
+                  :key="insight.id" 
+                  class="glass-card" 
+                  style="background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); padding: 1.25rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.75rem; justify-content: space-between; transition: transform 0.2s ease, border-color 0.2s;"
+                  onmouseover="this.style.transform='translateY(-3px)'; this.style.borderColor='rgba(0, 242, 254, 0.2)';"
+                  onmouseout="this.style.transform='translateY(0)'; this.style.borderColor='rgba(255,255,255,0.04)';"
+                >
+                  <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 0.58rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(0, 242, 254, 0.12); color: #00f2fe; text-transform: uppercase;">
+                        {{ insight.category }}
+                      </span>
+                      <span style="font-size: 0.65rem; color: var(--text-muted);">{{ insight.source }}</span>
+                    </div>
+                    <h4 style="margin: 0; font-size: 0.88rem; font-weight: 700; color: #fff; line-height: 1.4;">
+                      {{ insight.title }}
+                    </h4>
+                    <p style="margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                      {{ insight.content }}
+                    </p>
+                  </div>
+                  <div style="border-top: 1px solid rgba(255,255,255,0.04); padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--text-muted);">
+                    <span>Fonte: Banco Central / BCB & VagaSync IA</span>
+                    <span style="color: #00f2fe; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 2px;">
+                      Aplicar no Painel <i class="fa-solid fa-arrow-trend-up"></i>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4175,7 +5238,13 @@ const restoreCandidate = () => {
 
         <!-- ── Aba Contato com RH ── -->
         <template v-if="activeTab === 'contato'">
-          <ContatoRH :jobs="jobs" :showToast="showToast" :config="config" />
+          <ContatoRH 
+            :jobs="jobs" 
+            :showToast="showToast" 
+            :config="config" 
+            @apply-recruiter="openApplyModal"
+            @start-chat="startChatWithRecruiter"
+          />
         </template>
 
         <!-- ── Aba Mensagens ── -->
@@ -4278,462 +5347,596 @@ const restoreCandidate = () => {
             </div>
           </div>
         </template>
-
+        
         <!-- ── Aba Configurações ── -->
         <template v-if="activeTab === 'config'">
-          <div style="max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
-            <!-- Busca e LinkedIn -->
-            <div class="glass-card">
-              <h2 class="section-title">
-                <Settings :size="20" /> Configurações Gerais
-              </h2>
+          <div style="max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <!-- Seleção de Sub-abas (Perfil vs. Automação) -->
+            <div style="display: flex; gap: 0.5rem; background: rgba(5, 7, 15, 0.4); padding: 4px; border-radius: 10px; border: 1px solid var(--border-color);">
+              <button 
+                type="button" 
+                class="nav-link-btn" 
+                style="flex: 1; text-align: center; justify-content: center; font-size: 0.85rem;"
+                :class="{ active: activeConfigSubTab === 'profile' }"
+                @click="activeConfigSubTab = 'profile'"
+              >
+                👤 Meus Dados & Sistema
+              </button>
+              <button 
+                type="button" 
+                class="nav-link-btn" 
+                style="flex: 1; text-align: center; justify-content: center; font-size: 0.85rem;"
+                :class="{ active: activeConfigSubTab === 'automation' }"
+                @click="activeConfigSubTab = 'automation'"
+              >
+                ⚙️ Automação & Busca
+              </button>
+            </div>
+
+            <!-- SUB-ABA 1: MEUS DADOS E CONFIGURAÇÕES DO SISTEMA -->
+            <div v-if="activeConfigSubTab === 'profile'" style="display: flex; flex-direction: column; gap: 1.5rem;">
               
-              <form @submit="saveConfig">
-                <!-- Gemini API Key -->
-                <div style="
-                  display: flex; align-items: center; gap: 0.75rem;
-                  padding: 0.75rem 1rem; border-radius: 10px;
-                  background: rgba(16,185,129,0.07);
-                  border: 1px solid rgba(16,185,129,0.2);
-                  margin-bottom: 1.25rem;
-                ">
-                  <Sparkles :size="16" style="color: var(--color-success); flex-shrink: 0;" />
-                  <div>
-                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--color-success);">
-                      Gemini AI — Ativo e Configurado
-                    </span>
-                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem;">
-                      Chave da API armazenada com segurança no servidor. Não é exibida por razões de segurança.
-                    </p>
+              <!-- Foto de Perfil & Dados Pessoais -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 style="margin: 0; font-size: 1.15rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-user-gear" style="color: var(--color-secondary);"></i> Meu Perfil VagaSync
+                </h3>
+
+                <!-- Upload de Foto de Perfil -->
+                <div style="display: flex; align-items: center; gap: 1.5rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); padding: 1rem; border-radius: 12px;">
+                  <!-- Preview -->
+                  <div style="position: relative;">
+                    <div 
+                      style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 3px solid #00f2fe; box-shadow: 0 0 15px rgba(0,242,254,0.3); font-weight: 700; color: #060913; font-size: 2rem;"
+                    >
+                      <img v-if="profileData.photo" :src="profileData.photo" style="width: 100%; height: 100%; object-fit: cover;" />
+                      <span v-else>{{ profileData.name ? profileData.name.charAt(0).toUpperCase() : 'U' }}</span>
+                    </div>
                   </div>
-                  <span style="
-                    margin-left: auto; font-size: 0.7rem; padding: 0.2rem 0.6rem;
-                    border-radius: 20px; background: rgba(16,185,129,0.15);
-                    border: 1px solid rgba(16,185,129,0.3); color: var(--color-success);
-                    font-weight: 700; letter-spacing: 0.05em;
-                  ">🔒 OCULTA</span>
+                  <!-- Ações da Foto -->
+                  <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: #fff;">Foto de Perfil</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">Suporta JPG, PNG. Tamanho máximo 2MB.</span>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                      <input 
+                        type="file" 
+                        id="profile_photo_upload_input" 
+                        style="display: none;" 
+                        accept="image/*"
+                        @change="handleProfilePhotoUpload"
+                      />
+                      <button 
+                        type="button" 
+                        class="btn btn-secondary" 
+                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem;" 
+                        @click="document.getElementById('profile_photo_upload_input').click()"
+                      >
+                        Carregar Foto
+                      </button>
+                      <button 
+                        v-if="profileData.photo"
+                        type="button" 
+                        class="btn btn-secondary" 
+                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem; color: var(--color-error); border-color: rgba(239,68,68,0.2);" 
+                        @click="profileData.photo = ''"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="form-group">
-                  <label>Palavras-Chave de Busca (Gemini + LinkedIn, separadas por vírgula)</label>
-                  <input 
-                    type="text" 
-                    class="form-input" 
-                    v-model="config.keywords" 
-                    placeholder="Ex: Desenvolvedor React, Python, Node.js"
-                  />
+                <!-- Formulário de dados -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div class="form-group" style="margin: 0;">
+                    <label>Nome Completo</label>
+                    <input type="text" class="form-input" v-model="profileData.name" placeholder="Digite seu nome..." />
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label>E-mail de Contato</label>
+                    <input type="email" class="form-input" v-model="profileData.email" placeholder="seu@email.com" />
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label>Telefone de Contato</label>
+                    <input type="text" class="form-input" v-model="profileData.phone" placeholder="+55 (11) 99999-9999" />
+                  </div>
+                  <div class="form-group" style="margin: 0;" v-if="userRole === 'recruiter'">
+                    <label>Nome da Empresa / Organização</label>
+                    <input type="text" class="form-input" v-model="profileData.company" placeholder="Sua Empresa..." />
+                  </div>
                 </div>
 
-                <!-- Filtros de Localização e Fontes -->
-                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
+                <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                  <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveProfileData">
+                    Salvar Dados Cadastrais
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tema & Preferências de Sistema -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-sliders" style="color: var(--color-secondary);"></i> Preferências & Sistema
+                </h3>
+
+                <!-- Dark Mode / Tema -->
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+                  <div>
+                    <span style="font-size: 0.88rem; font-weight: 700; color: #fff;">Tema Visual (Escuro vs Claro)</span>
+                    <p style="font-size: 0.72rem; color: var(--text-muted); margin: 2px 0 0 0;">Alterna entre o Dark Mode original e o Light Mode de leitura.</p>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ darkMode ? 'Dark Mode 🌙' : 'Light Mode ☀️' }}</span>
+                    <input 
+                      type="checkbox" 
+                      v-model="darkMode" 
+                      @change="toggleDarkMode" 
+                      style="width: 18px; height: 18px; cursor: pointer;"
+                    />
+                  </div>
+                </div>
+
+                <!-- Configurações Adicionais de Sistema -->
+                <div style="display: flex; flex-direction: column; gap: 0.8rem;">
+                  <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                    <input
+                      type="checkbox"
+                      v-model="systemSettings.soundEnabled"
+                      style="width: 16px; height: 16px; cursor: pointer;"
+                    />
+                    <div>
+                      <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔊 Efeitos Sonoros do Copiloto</div>
+                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Tocar avisos sonoros nas varreduras bem-sucedidas do Agente</div>
+                    </div>
+                  </label>
+
+                  <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+                    <input
+                      type="checkbox"
+                      v-model="systemSettings.autoRefresh"
+                      style="width: 16px; height: 16px; cursor: pointer;"
+                    />
+                    <div>
+                      <div style="font-size: 0.82rem; font-weight: 600; color: #fff;">🔄 Auto-Atualização do Painel</div>
+                      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Recarregar a lista de vagas automaticamente a cada 5 segundos</div>
+                    </div>
+                  </label>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end;">
+                  <button type="button" class="btn btn-primary" style="font-size: 0.82rem;" @click="saveSystemSettings">
+                    Salvar Preferências
+                  </button>
+                </div>
+              </div>
+
+              <!-- Privacidade, LGPD & Segurança -->
+              <div class="glass-card" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <h3 style="margin: 0; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-shield-halved" style="color: var(--color-secondary);"></i> Privacidade & Conformidade (LGPD)
+                </h3>
+                <p style="margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
+                  Em conformidade com a Lei Geral de Proteção de Dados (LGPD), você tem controle total sobre o download de suas informações cadastrais e o direito de ser excluído permanentemente da nossa plataforma de IA.
+                </p>
+
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.25rem;">
+                  <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px;" @click="exportUserData">
+                    <i class="fa-solid fa-download"></i> Exportar Meus Dados (JSON)
+                  </button>
+                  <button type="button" class="btn btn-secondary" style="font-size: 0.8rem; display: flex; align-items: center; gap: 4px; color: var(--color-error); border-color: rgba(239,68,68,0.2);" @click="deleteAccount">
+                    <i class="fa-solid fa-user-xmark"></i> Excluir Minha Conta (Esquecimento)
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- SUB-ABA 2: CONFIGURAÇÕES DE AUTOMAÇÃO E BUSCA (FORMULÁRIO EXISTENTE) -->
+            <div v-else style="display: flex; flex-direction: column; gap: 1.5rem;">
+              
+              <!-- Busca e LinkedIn -->
+              <div class="glass-card">
+                <h2 class="section-title">
+                  <Settings :size="20" /> Parâmetros de Automação & Busca
+                </h2>
+                
+                <form @submit="saveConfig">
+                  <!-- Gemini API Key -->
+                  <div style="
+                    display: flex; align-items: center; gap: 0.75rem;
+                    padding: 0.75rem 1rem; border-radius: 10px;
+                    background: rgba(16,185,129,0.07);
+                    border: 1px solid rgba(16,185,129,0.2);
+                    margin-bottom: 1.25rem;
+                  ">
+                    <Sparkles :size="16" style="color: var(--color-success); flex-shrink: 0;" />
+                    <div>
+                      <span style="font-size: 0.85rem; font-weight: 600; color: var(--color-success);">
+                        Gemini AI — Ativo e Configurado
+                      </span>
+                      <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem;">
+                        Chave da API armazenada com segurança no servidor. Não é exibida por razões de segurança.
+                      </p>
+                    </div>
+                    <span style="
+                      margin-left: auto; font-size: 0.7rem; padding: 0.2rem 0.6rem;
+                      border-radius: 20px; background: rgba(16,185,129,0.15);
+                      border: 1px solid rgba(16,185,129,0.3); color: var(--color-success);
+                      font-weight: 700; letter-spacing: 0.05em;
+                    ">🔒 OCULTA</span>
+                  </div>
+
                   <div class="form-group">
-                    <label>Localização da Busca ({{ activeSearchScope.label }})</label>
+                    <label>Palavras-Chave de Busca (Gemini + LinkedIn, separadas por vírgula)</label>
                     <input 
                       type="text" 
                       class="form-input" 
-                      v-model="config.search_location" 
-                      :placeholder="activeSearchScope.placeholder"
+                      v-model="config.keywords" 
+                      placeholder="Ex: Desenvolvedor React, Python, Node.js"
                     />
-                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; display: block;">
-                      {{ activeSearchScope.help }}
-                    </span>
                   </div>
 
-                  <div class="form-group">
-                    <label>Buscar por</label>
-                    <select 
-                      class="form-input" 
-                      v-model="config.search_scope" 
-                      style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color);"
-                    >
-                      <option value="cidade">Cidade</option>
-                      <option value="estado">Estado</option>
-                      <option value="pais">País</option>
-                      <option value="internacional">Internacional</option>
-                    </select>
+                  <!-- Filtros de Localização e Fontes -->
+                  <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem;">
+                    <div class="form-group">
+                      <label>Localização da Busca ({{ activeSearchScope.label }})</label>
+                      <input 
+                        type="text" 
+                        class="form-input" 
+                        v-model="config.search_location" 
+                        :placeholder="activeSearchScope.placeholder"
+                      />
+                      <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; display: block;">
+                        {{ activeSearchScope.help }}
+                      </span>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Buscar por</label>
+                      <select 
+                        class="form-input" 
+                        v-model="config.search_scope" 
+                        style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color);"
+                      >
+                        <option value="cidade">Cidade</option>
+                        <option value="estado">Estado</option>
+                        <option value="pais">País</option>
+                        <option value="internacional">Internacional</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
 
-                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
-                  <input 
-                    type="checkbox" 
-                    id="web_search_chk"
-                    :checked="config.enable_web_search === 'true'"
-                    @change="(e) => config.enable_web_search = e.target.checked ? 'true' : 'false'"
-                    style="cursor: pointer; width: 16px; height: 16px;"
-                  />
-                  <label htmlFor="web_search_chk" style="margin: 0; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
-                    Gemini busca vagas na internet junto com o agente (ATS oficiais, Gupy, Greenhouse, Lever, LinkedIn, Indeed, InfoJobs)
-                  </label>
-                </div>
-
-                <div class="form-group" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.22); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
-                  <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--color-success); font-weight: 700;">
-                    <Map :size="15" /> Mapa Interativo & Geocodificação (Leaflet Ativo)
-                  </label>
-                  <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.4;">
-                    🚀 <strong>Mapa Gratuito Ativado!</strong> O buscador de vagas agora utiliza **Leaflet & OpenStreetMap** por padrão. Não é necessária nenhuma chave de API ou configuração para visualizar o mapa interativo.
-                  </div>
-                  <input
-                    type="password"
-                    class="form-input"
-                    v-model="config.google_maps_api_key"
-                    placeholder="Google Maps API Key (opcional para geocodificação externa)..."
-                    style="margin-top: 0.7rem;"
-                  />
-                  <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.45rem; display: block; line-height: 1.5;">
-                    Nota: A chave acima é opcional. O mapa na aba de Radar de Vagas funciona 100% de graça com Leaflet.
-                  </span>
-                </div>
-
-                <div class="form-group" style="background: rgba(10,102,194,0.06); border: 1px solid rgba(10,102,194,0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.5rem;">
-                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                    <label style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #60a5fa; display: flex; align-items: center; gap: 0.4rem;">
-                      <Globe :size="15" /> LinkedIn &mdash; Sessão para Candidatura Real
+                  <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <input 
+                      type="checkbox" 
+                      id="web_search_chk"
+                      :checked="config.enable_web_search === 'true'"
+                      @change="(e) => config.enable_web_search = e.target.checked ? 'true' : 'false'"
+                      style="cursor: pointer; width: 16px; height: 16px;"
+                    />
+                    <label htmlFor="web_search_chk" style="margin: 0; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                      Gemini busca vagas na internet junto com o agente (ATS oficiais, Gupy, Greenhouse, Lever, LinkedIn, Indeed, InfoJobs)
                     </label>
-                    <button
-                      type="button"
-                      @click="window.open('https://www.linkedin.com/login', '_blank', 'width=900,height=650')"
-                      style="
-                        display: flex; align-items: center; gap: 0.5rem;
-                        padding: 0.45rem 1rem; border: none;
-                        background: linear-gradient(135deg, #0a66c2, #0077b5);
-                        color: #fff; font-weight: 700; font-size: 0.82rem;
-                        cursor: pointer; box-shadow: 0 2px 12px rgba(10,102,194,0.4);
-                        transition: all 0.2s; white-space: nowrap;
-                      "
-                      class="linkedin-login-btn"
-                    >
-                      <Globe :size="14" />
-                      Abrir Login LinkedIn
-                    </button>
                   </div>
-                  <div class="form-group" style="margin-bottom: 1rem;">
-                    <label>LinkedIn Client ID</label>
-                    <input
-                      type="text"
-                      class="form-input"
-                      v-model="config.linkedin_client_id"
-                      placeholder="Coloque o LinkedIn Client ID aqui"
-                    />
-                  </div>
-                  <div class="form-group" style="margin-bottom: 1rem;">
-                    <label>LinkedIn Client Secret</label>
+
+                  <div class="form-group" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.22); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--color-success); font-weight: 700;">
+                      <Map :size="15" /> Mapa Interativo & Geocodificação (Leaflet Ativo)
+                    </label>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.4;">
+                      🚀 <strong>Mapa Gratuito Ativado!</strong> O buscador de vagas agora utiliza **Leaflet & OpenStreetMap** por padrão. Não é necessária nenhuma chave de API ou configuração para visualizar o mapa interativo.
+                    </div>
                     <input
                       type="password"
                       class="form-input"
-                      v-model="config.linkedin_client_secret"
-                      placeholder="Coloque o LinkedIn Client Secret aqui"
+                      v-model="config.google_maps_api_key"
+                      placeholder="Google Maps API Key (opcional para geocodificação externa)..."
+                      style="margin-top: 0.7rem;"
                     />
+                    <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.45rem; display: block; line-height: 1.5;">
+                      Nota: A chave acima é opcional. O mapa na aba de Radar de Vagas funciona 100% de graça com Leaflet.
+                    </span>
                   </div>
-                  <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.4rem;">Como obter o Cookie de sessão (li_at):</strong>
-                    <ol style="margin: 0; padding-left: 1.1rem;">
-                      <li>Clique em <strong>"Abrir Login LinkedIn"</strong> acima e faça login normalmente.</li>
-                      <li>Com o LinkedIn aberto, pressione <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0 4px; font-family: monospace;">F12</kbd> para abrir o DevTools.</li>
-                      <li>Vá em <strong>Application &rarr; Cookies &rarr; linkedin.com</strong>.</li>
-                      <li>Copie o valor do cookie chamado <code style="color: #60a5fa; background: rgba(96,165,250,0.1); padding: 0 4px; border-radius: 3px;">li_at</code>.</li>
-                      <li>Cole no campo abaixo e salve.</li>
-                    </ol>
-                  </div>
-                  <input
-                    type="password"
-                    class="form-input"
-                    v-model="config.linkedin_cookie"
-                    placeholder="Cole aqui o valor do cookie 'li_at'..."
-                    :style="{ borderColor: config.linkedin_cookie ? 'rgba(10,102,194,0.5)' : undefined }"
-                  />
-                  <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem;">
-                    <AlertCircle :size="11" />
-                    {{ config.linkedin_cookie
-                      ? 'Cookie configurado — o agente fará candidaturas reais no LinkedIn.'
-                      : 'Sem cookie → O agente não fará candidaturas no LinkedIn. Configure o cookie acima para ativar.' }}
-                  </span>
-                </div>
 
-                <!-- Notificações Simples -->
-                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem;">
-                  <label style="font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem;">
-                    <Bell :size="15" style="color: var(--color-secondary);" /> Como você quer receber alertas das vagas?
-                  </label>
-                  <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
-                    Escolha <strong>uma</strong> das opções abaixo — configure só o que precisar.
-                  </p>
-
-                  <!-- Opção A — WhatsApp CallMeBot -->
-                  <details open style="margin-bottom: 0.9rem;">
-                    <summary style="cursor: pointer; padding: 0.6rem 0.75rem; border-radius: 8px; background: rgba(37,211,102,0.07); border: 1px solid rgba(37,211,102,0.2); index-size: 0.85rem; font-weight: 600; color: #4ade80; list-style: none; display: flex; align-items: center; gap: 0.5rem;">
-                      <span style="font-size: 1.1rem;">💬</span> WhatsApp (grátis, sem aplicativo extra)
-                      <span style="margin-left: auto; font-size: 0.72rem; opacity: 0.7;">clique para recolher/expandir</span>
-                    </summary>
-                    <div style="padding: 0.9rem; background: rgba(0,0,0,0.2); border-radius: 0 0 8px 8px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.8;">
-                      <strong style="color: var(--text-primary); display: block; margin-bottom: 0.4rem;">Configurar em 3 passos (serviço CallMeBot — 100% gratuito):</strong>
-                      <ol style="padding-left: 1.1rem; margin: 0 0 0.75rem;">
-                        <li>Adicione o contato <strong>+34 644 53 40 20</strong> no seu WhatsApp.</li>
-                        <li>Envie a mensagem: <code style="background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 3px; color: #4ade80;">I allow callmebot to send me messages</code></li>
-                        <li>Você receberá a sua <strong>API Key</strong>. Depois preencha abaixo:</li>
+                  <div class="form-group" style="background: rgba(10,102,194,0.06); border: 1px solid rgba(10,102,194,0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.5rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                      <label style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #60a5fa; display: flex; align-items: center; gap: 0.4rem;">
+                        <Globe :size="15" /> LinkedIn &mdash; Sessão para Candidatura Real
+                      </label>
+                      <button
+                        type="button"
+                        @click="window.open('https://www.linkedin.com/login', '_blank', 'width=900,height=650')"
+                        style="
+                          display: flex; align-items: center; gap: 0.5rem;
+                          padding: 0.45rem 1rem; border: none;
+                          background: linear-gradient(135deg, #0a66c2, #0077b5);
+                          color: #fff; font-weight: 700; font-size: 0.82rem;
+                          cursor: pointer; box-shadow: 0 2px 12px rgba(10,102,194,0.4);
+                          transition: all 0.2s; white-space: nowrap;
+                        "
+                        class="linkedin-login-btn"
+                      >
+                        <Globe :size="14" />
+                        Abrir Login LinkedIn
+                      </button>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                      <label>LinkedIn Client ID</label>
+                      <input
+                        type="text"
+                        class="form-input"
+                        v-model="config.linkedin_client_id"
+                        placeholder="Coloque o LinkedIn Client ID aqui"
+                      />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                      <label>LinkedIn Client Secret</label>
+                      <input
+                        type="password"
+                        class="form-input"
+                        v-model="config.linkedin_client_secret"
+                        placeholder="Coloque o LinkedIn Client Secret aqui"
+                      />
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
+                      <strong style="color: var(--text-primary); display: block; margin-bottom: 0.4rem;">Como obter o Cookie de sessão (li_at):</strong>
+                      <ol style="margin: 0; padding-left: 1.1rem;">
+                        <li>Clique em <strong>"Abrir Login LinkedIn"</strong> acima e faça login normalmente.</li>
+                        <li>Com o LinkedIn aberto, pressione <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0 4px; font-family: monospace;">F12</kbd> para abrir o DevTools.</li>
+                        <li>Vá em <strong>Application &rarr; Cookies &rarr; linkedin.com</strong>.</li>
+                        <li>Copie o valor do cookie chamado <code style="color: #60a5fa; background: rgba(96,165,250,0.1); padding: 0 4px; border-radius: 3px;">li_at</code>.</li>
+                        <li>Cole no campo abaixo e salve.</li>
                       </ol>
-                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
-                        <div class="form-group" style="margin: 0;">
-                          <label>Seu número (+55...)</label>
-                          <input type="text" class="form-input" v-model="config.whatsapp_phone" placeholder="+5511999999999" />
-                        </div>
-                        <div class="form-group" style="margin: 0;">
-                          <label>API Key recebida</label>
-                          <input type="text" class="form-input" v-model="config.whatsapp_webhook" placeholder="Cole aqui a API Key..." />
-                        </div>
-                      </div>
                     </div>
-                  </details>
+                    <input
+                      type="password"
+                      class="form-input"
+                      v-model="config.linkedin_cookie"
+                      placeholder="Cole aqui o valor do cookie 'li_at'..."
+                      :style="{ borderColor: config.linkedin_cookie ? 'rgba(10,102,194,0.5)' : undefined }"
+                    />
+                    <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem;">
+                      <AlertCircle :size="11" />
+                      {{ config.linkedin_cookie
+                        ? 'Cookie configurado — o agente fará candidaturas reais no LinkedIn.'
+                        : 'Sem cookie → O agente não fará candidaturas no LinkedIn. Configure o cookie acima para ativar.' }}
+                    </span>
+                  </div>
 
-                  <!-- Opção B — n8n -->
-                  <details>
-                    <summary style="cursor: pointer; padding: 0.6rem 0.75rem; border-radius: 8px; background: rgba(234,88,12,0.07); border: 1px solid rgba(234,88,12,0.2); font-size: 0.85rem; font-weight: 600; color: #fb923c; list-style: none; display: flex; align-items: center; gap: 0.5rem;">
-                      <span style="font-size: 1.1rem;">⚙️</span> n8n / Webhook avançado (para quem já usa automação)
-                      <span style="margin-left: auto; font-size: 0.72rem; opacity: 0.7;">clique para expandir</span>
-                    </summary>
-                    <div style="padding: 0.9rem; background: rgba(0,0,0,0.2); border-radius: 0 0 8px 8px; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.8;">
-                      <p style="margin: 0 0 0.6rem;">Se você tem um workflow no n8n ou outra plataforma (Zapier, Make…), cole a URL abaixo. O Vaga Sync enviará um JSON automaticamente a cada candidatura ou retorno de RH.</p>
-                      <div class="form-group" style="margin: 0;">
-                        <label>URL do Webhook</label>
-                        <input type="text" class="form-input" v-model="config.n8n_webhook_url" placeholder="https://n8n.seu-dominio.com/webhook/..." />
-                      </div>
-                    </div>
-                  </details>
+                  <div style="display: flex; justify-content: flex-end; margin-top: 2rem;">
+                    <button type="submit" class="btn btn-primary">
+                      Salvar Parâmetros
+                    </button>
+                  </div>
+                </form>
+
+                <div v-if="saveSuccess" style="margin-top: 1rem; color: var(--color-success); font-size: 0.9rem; text-align: center;">
+                  Parâmetros salvos com sucesso!
                 </div>
+              </div>
 
-                <div style="display: flex; justify-content: flex-end; margin-top: 2rem;">
-                  <button type="submit" class="btn btn-primary">
-                    Salvar Configurações
+              <!-- Notificações do Navegador -->
+              <div class="glass-card">
+                <h2 class="section-title" style="margin-bottom: 0.5rem;">
+                  <i class="fa-solid fa-bell"></i> Notificações do Navegador
+                </h2>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+                  Controle quando você quer receber notificações push do navegador para manter-se informado sobre novos eventos.
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                  <div style="
+                    display: flex; align-items: center; gap: 1rem;
+                    padding: 1rem; border-radius: 12px;
+                    background: rgba(59, 130, 246, 0.08);
+                    border: 1px solid rgba(59, 130, 246, 0.2);
+                  ">
+                    <input
+                      type="checkbox"
+                      v-model="notificationSettings.enabled"
+                      @change="saveNotificationSettings"
+                      style="width: 20px; height: 20px; cursor: pointer;"
+                      id="notif_enabled"
+                    />
+                    <label for="notif_enabled" style="margin: 0; cursor: pointer; flex: 1;">
+                      <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
+                        Habilitar Notificações do Navegador
+                      </div>
+                      <div style="font-size: 0.75rem; color: var(--text-secondary);">
+                        {{ Notification.permission === 'granted' ? '✅ Permissão já concedida' : Notification.permission === 'denied' ? '❌ Permissão negada pelo navegador' : '⏳ Será solicitada quando habilitado' }}
+                      </div>
+                    </label>
+                  </div>
+
+                  <div v-if="notificationSettings.enabled" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-primary);">Tipos de Notificações:</h4>
+
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.15);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.onApplications"
+                        @change="saveNotificationSettings"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div style="flex: 1;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">✅ Candidaturas Registradas</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando uma candidatura é enviada com sucesso</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.onRecruiterContact"
+                        @change="saveNotificationSettings"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div style="flex: 1;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">📞 Contato de Recrutador</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando um recrutador responde ou entra em contato</div>
+                      </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
+                      <input
+                        type="checkbox"
+                        v-model="notificationSettings.onSearchResults"
+                        @change="saveNotificationSettings"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                      />
+                      <div style="flex: 1;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">🌐 Novas Vagas Encontradas</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando novas vagas são encontradas na busca</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div v-else style="padding: 0.75rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary);">
+                    Habilite as notificações acima para configurar quais tipos de eventos deseja receber.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Notificações Multi-Canal -->
+              <div class="glass-card">
+                <h2 class="section-title" style="margin-bottom: 0.5rem;">
+                  <i class="fa-solid fa-bell"></i> Notificações Multi-Canal
+                </h2>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+                  Configure um ou mais canais abaixo. O Vaga Sync tentará cada canal em ordem (n8n → Telegram → E-mail → Webhook Genérico) com fallback automático.
+                </p>
+
+                <!-- Status dos canais -->
+                <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.5rem;">
+                  <span 
+                    v-if="notifyChannels" 
+                    v-for="[canal, status] in Object.entries(notifyChannels)" 
+                    :key="canal" 
+                    style="
+                      font-size: 0.75rem; padding: 0.25rem 0.6rem;
+                      border-radius: 20px; font-weight: 600;
+                    "
+                    :style="{
+                      background: status.includes('✅') ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${status.includes('✅') ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
+                      color: status.includes('✅') ? 'var(--color-success)' : 'var(--text-muted)'
+                    }"
+                  >
+                    {{ status }} {{ canal }}
+                  </span>
+                  <button 
+                    v-else 
+                    class="btn btn-secondary" 
+                    style="font-size: 0.78rem; padding: 0.3rem 0.8rem;"
+                    @click="loadNotifyChannels"
+                  >
+                    Verificar canais configurados
                   </button>
                 </div>
-              </form>
 
-              <div v-if="saveSuccess" style="margin-top: 1rem; color: var(--color-success); font-size: 0.9rem; text-align: center;">
-                Alterações salvas com sucesso!
+                <!-- Telegram -->
+                <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                    <Smartphone :size="14" /> Telegram Bot
+                  </h4>
+                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                    Gratuito, instantâneo no celular. Crie um bot em @BotFather e copie o Token. Para o Chat ID, mande /start ao bot e acesse
+                    <code style="margin-left: 4px; color: var(--color-secondary);">api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>.
+                  </p>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group">
+                      <label>Token do Bot Telegram</label>
+                      <input type="password" class="form-input" v-model="config.telegram_token" placeholder="1234567890:ABCDef..." />
+                    </div>
+                    <div class="form-group">
+                      <label>Chat ID</label>
+                      <input type="text" class="form-input" v-model="config.telegram_chat_id" placeholder="Ex: 123456789" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- E-mail SMTP -->
+                <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                    <MessageSquare :size="14" /> E-mail (SMTP)
+                  </h4>
+                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                    Gmail: host <code style="color: var(--color-secondary);">smtp.gmail.com</code> porta <code style="color: var(--color-secondary);">465</code> (use uma Senha de App).
+                    Outlook: host <code style="color: var(--color-secondary);">smtp-mail.outlook.com</code> porta <code style="color: var(--color-secondary);">587</code>.
+                  </p>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group">
+                      <label>E-mail Remetente (Login SMTP)</label>
+                      <input type="email" class="form-input" v-model="config.smtp_email" placeholder="seu@gmail.com" />
+                    </div>
+                    <div class="form-group">
+                      <label>Senha de App / Senha SMTP</label>
+                      <input type="password" class="form-input" v-model="config.smtp_password" placeholder="Senha de App do Gmail..." />
+                    </div>
+                    <div class="form-group">
+                      <label>Host SMTP</label>
+                      <input type="text" class="form-input" v-model="config.smtp_host" placeholder="smtp.gmail.com" />
+                    </div>
+                    <div class="form-group">
+                      <label>Porta SMTP</label>
+                      <input type="number" class="form-input" v-model="config.smtp_port" placeholder="465" />
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                      <label>Enviar Notificações Para (E-mail Destino)</label>
+                      <input type="email" class="form-input" v-model="config.notify_email" placeholder="Deixe em branco para usar o mesmo do remetente" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Webhook Genérico -->
+                <div style="margin-bottom: 1.5rem;">
+                  <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
+                    <Globe :size="14" /> Webhook Genérico (Slack, Discord, Zapier, Make…)
+                  </h4>
+                  <div class="form-group">
+                    <label>URL do Webhook</label>
+                    <input type="text" class="form-input" v-model="config.generic_webhook_url" placeholder="https://hooks.slack.com/... ou https://discord.com/api/webhooks/..." />
+                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">
+                      Funciona com Slack, Discord, Zapier, Make.com ou qualquer serviço que aceita POST JSON.
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Botões de ação -->
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                  <button type="button" class="btn btn-secondary" @click="loadNotifyChannels" style="font-size: 0.85rem;">
+                    <CheckCircle :size="14" style="margin-right: 0.3rem;" />
+                    Verificar Canais
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-primary"
+                    @click="testNotification" 
+                    :disabled="testingNotify"
+                    style="font-size: 0.85rem;"
+                    :style="{ background: testingNotify ? 'rgba(59,130,246,0.4)' : undefined }"
+                  >
+                    <template v-if="testingNotify">
+                      <Loader :size="14" class="spin-animation" style="margin-right: 0.3rem;" />Testando...
+                    </template>
+                    <template v-else>
+                      <Bell :size="14" style="margin-right: 0.3rem;" />Testar Todos os Canais
+                    </template>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-primary"
+                    @click="async (e) => { await saveConfig(e); loadNotifyChannels(); }"
+                    style="font-size: 0.85rem;"
+                  >
+                    Salvar Notificações
+                  </button>
+                </div>
               </div>
+
             </div>
 
-            <!-- Notificações do Navegador -->
-            <div class="glass-card">
-              <h2 class="section-title" style="margin-bottom: 0.5rem;">
-                <Bell :size="20" /> Notificações do Navegador
-              </h2>
-              <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
-                Controle quando você quer receber notificações push do navegador para manter-se informado sobre novos eventos.
-              </p>
-
-              <div style="display: flex; flex-direction: column; gap: 1rem;">
-                <!-- Master toggle -->
-                <div style="
-                  display: flex; align-items: center; gap: 1rem;
-                  padding: 1rem; border-radius: 12px;
-                  background: rgba(59, 130, 246, 0.08);
-                  border: 1px solid rgba(59, 130, 246, 0.2);
-                ">
-                  <input
-                    type="checkbox"
-                    v-model="notificationSettings.enabled"
-                    @change="saveNotificationSettings"
-                    style="width: 20px; height: 20px; cursor: pointer;"
-                    id="notif_enabled"
-                  />
-                  <label for="notif_enabled" style="margin: 0; cursor: pointer; flex: 1;">
-                    <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
-                      Habilitar Notificações do Navegador
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--text-secondary);">
-                      {{ Notification.permission === 'granted' ? '✅ Permissão já concedida' : Notification.permission === 'denied' ? '❌ Permissão negada pelo navegador' : '⏳ Será solicitada quando habilitado' }}
-                    </div>
-                  </label>
-                </div>
-
-                <!-- Individual notification types (disabled if master toggle is off) -->
-                <div v-if="notificationSettings.enabled" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 10px;">
-                  <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-primary);">Tipos de Notificações:</h4>
-
-                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.15);">
-                    <input
-                      type="checkbox"
-                      v-model="notificationSettings.onApplications"
-                      @change="saveNotificationSettings"
-                      style="width: 16px; height: 16px; cursor: pointer;"
-                    />
-                    <div style="flex: 1;">
-                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">✅ Candidaturas Registradas</div>
-                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando uma candidatura é enviada com sucesso</div>
-                    </div>
-                  </label>
-
-                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.15);">
-                    <input
-                      type="checkbox"
-                      v-model="notificationSettings.onRecruiterContact"
-                      @change="saveNotificationSettings"
-                      style="width: 16px; height: 16px; cursor: pointer;"
-                    />
-                    <div style="flex: 1;">
-                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">📞 Contato de Recrutador</div>
-                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando um recrutador responde ou entra em contato</div>
-                    </div>
-                  </label>
-
-                  <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; padding: 0.6rem; border-radius: 8px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15);">
-                    <input
-                      type="checkbox"
-                      v-model="notificationSettings.onSearchResults"
-                      @change="saveNotificationSettings"
-                      style="width: 16px; height: 16px; cursor: pointer;"
-                    />
-                    <div style="flex: 1;">
-                      <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">🌐 Novas Vagas Encontradas</div>
-                      <div style="font-size: 0.75rem; color: var(--text-secondary);">Notificação quando novas vagas são encontradas na busca</div>
-                    </div>
-                  </label>
-                </div>
-
-                <div v-else style="padding: 0.75rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; font-size: 0.82rem; color: var(--text-secondary);">
-                  Habilite as notificações acima para configurar quais tipos de eventos deseja receber.
-                </div>
-              </div>
-            </div>
-
-            <!-- Notificações Multi-Canal -->
-            <div class="glass-card">
-              <h2 class="section-title" style="margin-bottom: 0.5rem;">
-                <Bell :size="20" /> Notificações Multi-Canal
-              </h2>
-              <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
-                Configure um ou mais canais abaixo. O Vaga Sync tentará cada canal em ordem (n8n → Telegram → E-mail → Webhook Genérico) com fallback automático.
-              </p>
-
-              <!-- Status dos canais -->
-              <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1.5rem;">
-                <span 
-                  v-if="notifyChannels" 
-                  v-for="[canal, status] in Object.entries(notifyChannels)" 
-                  :key="canal" 
-                  style="
-                    font-size: 0.75rem; padding: 0.25rem 0.6rem;
-                    border-radius: 20px; font-weight: 600;
-                  "
-                  :style="{
-                    background: status.includes('✅') ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${status.includes('✅') ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
-                    color: status.includes('✅') ? 'var(--color-success)' : 'var(--text-muted)'
-                  }"
-                >
-                  {{ status }} {{ canal }}
-                </span>
-                <button 
-                  v-else 
-                  class="btn btn-secondary" 
-                  style="font-size: 0.78rem; padding: 0.3rem 0.8rem;"
-                  @click="loadNotifyChannels"
-                >
-                  Verificar canais configurados
-                </button>
-              </div>
-
-              <!-- Telegram -->
-              <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
-                <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                  <Smartphone :size="14" /> Telegram Bot
-                </h4>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-                  Gratuito, instantâneo no celular. Crie um bot em @BotFather e copie o Token. Para o Chat ID, mande /start ao bot e acesse
-                  <code style="margin-left: 4px; color: var(--color-secondary);">api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>.
-                </p>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                  <div class="form-group">
-                    <label>Token do Bot Telegram</label>
-                    <input type="password" class="form-input" v-model="config.telegram_token" placeholder="1234567890:ABCDef..." />
-                  </div>
-                  <div class="form-group">
-                    <label>Chat ID</label>
-                    <input type="text" class="form-input" v-model="config.telegram_chat_id" placeholder="Ex: 123456789" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- E-mail SMTP -->
-              <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
-                <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                  <MessageSquare :size="14" /> E-mail (SMTP)
-                </h4>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-                  Gmail: host <code style="color: var(--color-secondary);">smtp.gmail.com</code> porta <code style="color: var(--color-secondary);">465</code> (use uma Senha de App).
-                  Outlook: host <code style="color: var(--color-secondary);">smtp-mail.outlook.com</code> porta <code style="color: var(--color-secondary);">587</code>.
-                </p>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                  <div class="form-group">
-                    <label>E-mail Remetente (Login SMTP)</label>
-                    <input type="email" class="form-input" v-model="config.smtp_email" placeholder="seu@gmail.com" />
-                  </div>
-                  <div class="form-group">
-                    <label>Senha de App / Senha SMTP</label>
-                    <input type="password" class="form-input" v-model="config.smtp_password" placeholder="Senha de App do Gmail..." />
-                  </div>
-                  <div class="form-group">
-                    <label>Host SMTP</label>
-                    <input type="text" class="form-input" v-model="config.smtp_host" placeholder="smtp.gmail.com" />
-                  </div>
-                  <div class="form-group">
-                    <label>Porta SMTP</label>
-                    <input type="number" class="form-input" v-model="config.smtp_port" placeholder="465" />
-                  </div>
-                  <div class="form-group" style="grid-column: 1 / -1;">
-                    <label>Enviar Notificações Para (E-mail Destino)</label>
-                    <input type="email" class="form-input" v-model="config.notify_email" placeholder="Deixe em branco para usar o mesmo do remetente" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Webhook Genérico -->
-              <div style="margin-bottom: 1.5rem;">
-                <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--color-secondary); display: flex; gap: 0.4rem; align-items: center;">
-                  <Globe :size="14" /> Webhook Genérico (Slack, Discord, Zapier, Make…)
-                </h4>
-                <div class="form-group">
-                  <label>URL do Webhook</label>
-                  <input type="text" class="form-input" v-model="config.generic_webhook_url" placeholder="https://hooks.slack.com/... ou https://discord.com/api/webhooks/..." />
-                  <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">
-                    Funciona com Slack, Discord, Zapier, Make.com ou qualquer serviço que aceita POST JSON.
-                  </span>
-                </div>
-              </div>
-
-              <!-- Botões de ação -->
-              <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary" @click="loadNotifyChannels" style="font-size: 0.85rem;">
-                  <CheckCircle :size="14" style="margin-right: 0.3rem;" />
-                  Verificar Canais
-                </button>
-                <button 
-                  type="button" 
-                  class="btn btn-primary"
-                  @click="testNotification" 
-                  :disabled="testingNotify"
-                  style="font-size: 0.85rem;"
-                  :style="{ background: testingNotify ? 'rgba(59,130,246,0.4)' : undefined }"
-                >
-                  <template v-if="testingNotify">
-                    <Loader :size="14" class="spin-animation" style="margin-right: 0.3rem;" />Testando...
-                  </template>
-                  <template v-else>
-                    <Bell :size="14" style="margin-right: 0.3rem;" />Testar Todos os Canais
-                  </template>
-                </button>
-                <button 
-                  type="button" 
-                  class="btn btn-primary"
-                  @click="async (e) => { await saveConfig(e); loadNotifyChannels(); }"
-                  style="font-size: 0.85rem;"
-                >
-                  Salvar Notificações
-                </button>
-              </div>
-            </div>
           </div>
         </template>
       </main>

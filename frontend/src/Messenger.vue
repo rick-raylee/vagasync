@@ -35,7 +35,7 @@ let pollInterval = null;
 
 const contactedJobs = computed(() => {
   const list = Array.isArray(props.jobs) ? props.jobs : [];
-  const contacted = list.filter(j => j.status === 'contacted');
+  const contacted = list.filter(j => j.status === 'contacted' || j.status === 'applied');
   
   const aiCoachContact = {
     id: 'ai-coach',
@@ -522,6 +522,7 @@ const copyToClipboard = (text, fieldName) => {
 
             <div style="display: flex; gap: 0.5rem;">
               <a
+                v-if="activeJob.source !== 'recruiter'"
                 :href="activeJob.link"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -542,6 +543,23 @@ const copyToClipboard = (text, fieldName) => {
               >
                 Vaga no LinkedIn <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 12px; margin-left: 2px;"></i>
               </a>
+              <span
+                v-else
+                style="
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 0.35rem;
+                  padding: 0.4rem 0.8rem;
+                  border-radius: 6px;
+                  background: rgba(16, 185, 129, 0.15);
+                  border: 1px solid rgba(16, 185, 129, 0.3);
+                  color: #34d399;
+                  font-size: 0.75rem;
+                  font-weight: 600;
+                "
+              >
+                Vaga VagaSync ✓
+              </span>
             </div>
           </div>
 
