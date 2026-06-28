@@ -2789,6 +2789,17 @@ const restoreCandidate = () => {
           </div>
         </div>
 
+        <!-- Reassurance security banner -->
+        <div style="display: flex; gap: 0.75rem; background: rgba(16, 185, 129, 0.05); padding: 0.85rem 1.1rem; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2); margin-top: 0.85rem; text-align: left; align-items: flex-start;">
+          <i class="fa-solid fa-shield-halved" style="color: var(--color-success); font-size: 1.2rem; margin-top: 0.15rem; filter: drop-shadow(0 0 5px rgba(16,185,129,0.3));"></i>
+          <div>
+            <span style="font-size: 0.78rem; font-weight: 700; color: #fff; display: block; margin-bottom: 0.1rem;">Transação 100% Segura & Protegida</span>
+            <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin: 0;">
+              Seus dados de pagamento são transmitidos sob criptografia SSL de ponta a ponta. Nós não armazenamos as informações do seu cartão de crédito.
+            </p>
+          </div>
+        </div>
+
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-primary" style="flex: 1;" @click="handleCheckoutPayment">
             {{ checkoutPaymentMethod === 'card' ? 'Finalizar Assinatura 🔒' : 'Confirmar Pagamento' }}
