@@ -1582,12 +1582,7 @@ const handleCheckoutPayment = async () => {
           title: data.title
         };
         
-        // Open the official Mercado Pago payment checkout page in a new tab/window immediately
-        if (data.ticket_url) {
-          window.open(data.ticket_url, '_blank');
-        }
-        
-        showToast('Redirecionando... 🚀', 'Conclua o pagamento na aba do Mercado Pago aberta.', 'success');
+        showToast('Link Gerado! 🚀', 'Clique no botão verde para abrir a tela de pagamento do Mercado Pago.', 'success');
 
         // Start real-time confirmation loop
         if (pixPollInterval.value) clearInterval(pixPollInterval.value);
@@ -3242,23 +3237,37 @@ const restoreCandidate = () => {
 
           <!-- Pix After Redirect / Waiting status -->
           <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; text-align: center;">
-            <div style="display: flex; align-items: center; gap: 8px; justify-content: center; margin: 0.5rem 0;">
-              <i class="fa-solid fa-spinner fa-spin" style="color: #00f2fe; font-size: 1.2rem;"></i>
-              <span style="font-size: 0.76rem; color: #fff; font-weight: 700;">Aguardando pagamento no Mercado Pago...</span>
-            </div>
-            
-            <p style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-              O Pix foi gerado na outra aba. Se você fechou a janela do Mercado Pago, clique no botão abaixo para reabri-la:
+            <p style="font-size: 0.74rem; color: #fff; line-height: 1.4; margin: 0; font-weight: 600;">
+              Cobrança Pix gerada com sucesso! Clique no botão abaixo para abrir a tela oficial de pagamento:
             </p>
             
             <a 
               :href="pixGeneratedData.ticketUrl" 
               target="_blank"
-              class="btn btn-secondary" 
-              style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
+              class="btn btn-primary" 
+              style="
+                font-size: 0.82rem; 
+                padding: 0.65rem; 
+                width: 100%; 
+                display: inline-flex; 
+                align-items: center; 
+                justify-content: center; 
+                gap: 8px; 
+                text-decoration: none; 
+                background: linear-gradient(135deg, #10b981, #059669); 
+                border: none;
+                box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+                color: #fff;
+                font-weight: 700;
+              "
             >
-              <i class="fa-solid fa-arrow-up-right-from-square"></i> Reabrir tela do Mercado Pago
+              <i class="fa-solid fa-wallet"></i> ABRIR PAGAMENTO NO MERCADO PAGO 🚀
             </a>
+            
+            <div style="display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 0.25rem;">
+              <i class="fa-solid fa-spinner fa-spin" style="color: #00f2fe; font-size: 1rem;"></i>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Aguardando confirmação de pagamento...</span>
+            </div>
           </div>
         </div>
 
