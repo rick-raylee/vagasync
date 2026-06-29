@@ -585,6 +585,19 @@ watch(userFeatures, (val) => {
   localStorage.setItem('vagasync_features', JSON.stringify(val));
 }, { deep: true });
 
+// Prevent automatic scrolling to the bottom when switching tabs
+watch(activeTab, () => {
+  nextTick(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  });
+});
+
+watch(activeSettingsTab, () => {
+  nextTick(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  });
+});
+
 // Reinicialização segura dos blocos de anúncios Google AdSense em SPAs (Vue 3)
 watch([activeTab, isLoggedIn], () => {
   nextTick(() => {
