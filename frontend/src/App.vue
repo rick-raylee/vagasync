@@ -1582,7 +1582,12 @@ const handleCheckoutPayment = async () => {
           title: data.title
         };
         
-        showToast('Pix Gerado! 🚀', 'Escaneie o QR Code ou copie a chave copia-e-cola.', 'success');
+        // Open the official Mercado Pago payment checkout page in a new tab/window immediately
+        if (data.ticket_url) {
+          window.open(data.ticket_url, '_blank');
+        }
+        
+        showToast('Redirecionando... 🚀', 'Conclua o pagamento na aba do Mercado Pago aberta.', 'success');
 
         // Start real-time confirmation loop
         if (pixPollInterval.value) clearInterval(pixPollInterval.value);
@@ -3215,57 +3220,44 @@ const restoreCandidate = () => {
         </div>
 
         <!-- SEÇÃO 2: PIX MERCADO PAGO -->
-        <div style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 12px; padding: 1rem;">
+        <div style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 12px; padding: 1.25rem;">
           <h4 style="font-size: 0.85rem; color: #fff; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
             <i class="fa-solid fa-pix" style="color: #00f2fe;"></i> Pagar com Pix (Mercado Pago)
           </h4>
 
-          <!-- Pix Before Generating -->
+          <!-- Pix Before Redirect -->
           <div v-if="!pixGeneratedData" style="display: flex; flex-direction: column; gap: 0.5rem; text-align: center;">
             <p style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-              Gere uma cobrança oficial em tempo real e pague instantaneamente por QR Code ou chave Copia e Cola.
+              Você será redirecionado com segurança para o site do Mercado Pago para gerar e pagar o Pix QR Code.
             </p>
             <button 
               type="button" 
               class="btn btn-secondary" 
-              style="font-size: 0.75rem; padding: 0.5rem; width: 100%; border-color: rgba(0,242,254,0.3); background: rgba(0,242,254,0.05); color: #00f2fe;"
+              style="font-size: 0.75rem; padding: 0.5rem; width: 100%; border-color: rgba(0,242,254,0.3); background: rgba(0,242,254,0.05); color: #00f2fe; font-weight: 700;"
               @click="submitPixCheckout"
             >
-              🚀 Gerar Cobrança Pix no Mercado Pago
+              🚀 Ir para o Mercado Pago (Gerar Pix)
             </button>
           </div>
 
-          <!-- Pix After Generating -->
-          <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center;">
-            <div style="background: white; padding: 0.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center;">
-              <img 
-                :src="pixGeneratedData.qrCode" 
-                alt="QR Code Pix Oficial" 
-                style="width: 160px; height: 160px; display: block; object-fit: contain;" 
-              />
+          <!-- Pix After Redirect / Waiting status -->
+          <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; text-align: center;">
+            <div style="display: flex; align-items: center; gap: 8px; justify-content: center; margin: 0.5rem 0;">
+              <i class="fa-solid fa-spinner fa-spin" style="color: #00f2fe; font-size: 1.2rem;"></i>
+              <span style="font-size: 0.76rem; color: #fff; font-weight: 700;">Aguardando pagamento no Mercado Pago...</span>
             </div>
-            <p style="font-size: 0.68rem; color: var(--text-muted); margin: 0; line-height: 1.3;">
-              Copie o código Copia e Cola abaixo ou abra no Mercado Pago:
+            
+            <p style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+              O Pix foi gerado na outra aba. Se você fechou a janela do Mercado Pago, clique no botão abaixo para reabri-la:
             </p>
             
-            <button 
-              type="button" 
-              class="btn btn-secondary" 
-              style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); color: #34d399;"
-              @click="copyPixCopiaEColaDynamic"
-            >
-              <i class="fa-solid fa-copy"></i>
-              {{ pixCopied ? '✓ Código Copiado!' : 'Copiar Pix Copia e Cola' }}
-            </button>
-
             <a 
-              v-if="pixGeneratedData.ticketUrl"
               :href="pixGeneratedData.ticketUrl" 
               target="_blank"
               class="btn btn-secondary" 
               style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
             >
-              <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir tela do Mercado Pago
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Reabrir tela do Mercado Pago
             </a>
           </div>
         </div>
