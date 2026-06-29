@@ -1607,12 +1607,11 @@ class PaymentRequest(BaseModel):
 
 @app.post("/api/payments/create-pix")
 def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
-    """Gera um QR Code Pix via Mercado Pago com fallback para o QR Code oficial do Banco Central."""
+    """Gera uma preferência de checkout no Mercado Pago restrita a Pix com fallback para o QR Code oficial do Banco Central."""
     plan = PLAN_PRICES.get(payload.plan_id)
     if not plan:
         raise HTTPException(status_code=400, detail="Plano inválido")
 
-    # Get access token from DB (admin saved) or fall back to hardcoded
     access_token = get_config_value(db, "mercadopago_access_token", MP_ACCESS_TOKEN)
 
     headers = {
@@ -1621,33 +1620,52 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         "X-Idempotency-Key": secrets.token_hex(16),
     }
 
+    # Restringe o checkout do Mercado Pago para aceitar APENAS Pix
     body = {
-        "transaction_amount": plan["amount"],
-        "description": f"{plan['title']} — VagaSync",
-        "payment_method_id": "pix",
+        "items": [{
+            "title": plan["title"],
+            "quantity": 1,
+            "currency_id": plan["currency"],
+            "unit_price": plan["amount"],
+        }],
         "payer": {
             "email": payload.user_email,
-            "first_name": payload.user_name.split()[0] if payload.user_name else "Cliente",
+        },
+        "payment_methods": {
+            "excluded_payment_types": [
+                {"id": "credit_card"},
+                {"id": "debit_card"},
+                {"id": "ticket"}
+            ]
+        },
+        "back_urls": {
+            "success": "https://vagasync.com.br/?payment=success",
+            "failure": "https://vagasync.com.br/?payment=failure",
+            "pending": "https://vagasync.com.br/?payment=pending",
+        },
+        "auto_return": "approved",
+        "notification_url": "https://vagasync.com.br/api/payments/webhook",
+        "metadata": {
+            "plan_id": payload.plan_id,
+            "user_email": payload.user_email,
         }
     }
 
     try:
         resp = requests.post(
-            "https://api.mercadopago.com/v1/payments",
+            "https://api.mercadopago.com/checkout/preferences",
             headers=headers,
             json=body,
-            timeout=10
+            timeout=15
         )
         data = resp.json()
         if resp.status_code not in (200, 201):
-            # Força o fallback levantando exceção para tratamento abaixo
-            raise Exception(f"Mercado Pago retornou status {resp.status_code}: {data.get('message', '')}")
+            raise Exception(f"Mercado Pago Preference Error: {data.get('message', str(data))}")
 
-        payment_id = data.get("id")
-        pix_data = data.get("point_of_interaction", {}).get("transaction_data", {})
-        ticket_url = data.get("transaction_details", {}).get("ticket_url") or pix_data.get("ticket_url", "")
+        checkout_url = data.get("init_point")
+        preference_id = data.get("id")
 
-        # Save pending transaction
+        # Salva transação pendente
         tx = FinancialTransaction(
             user_email=payload.user_email,
             plan_name=plan["title"],
@@ -1661,11 +1679,11 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         db.refresh(tx)
 
         return {
-            "payment_id": payment_id,
+            "payment_id": preference_id,
             "transaction_id": tx.id,
-            "qr_code": pix_data.get("qr_code", ""),
-            "qr_code_base64": pix_data.get("qr_code_base64", ""),
-            "ticket_url": ticket_url,
+            "qr_code": "",
+            "qr_code_base64": "",
+            "ticket_url": checkout_url,  # O frontend direciona para essa URL oficial da página
             "amount": plan["amount"],
             "title": plan["title"],
             "status": "pending"
@@ -1676,7 +1694,12 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         if not pix_key or pix_key.strip() == "":
             pix_key = PIX_KEY
             
-        copia_e_cola = generate_static_pix(pix_key, plan["amount"])
+        # Sanitiza a chave Pix (remove pontos, traços e espaços se for CPF/CNPJ ou telefone)
+        clean_pix_key = pix_key.strip()
+        if "@" not in clean_pix_key:
+            clean_pix_key = "".join(char for char in clean_pix_key if char.isdigit())
+            
+        copia_e_cola = generate_static_pix(clean_pix_key, plan["amount"])
         
         tx = FinancialTransaction(
             user_email=payload.user_email,
