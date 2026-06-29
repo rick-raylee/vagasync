@@ -3237,37 +3237,67 @@ const restoreCandidate = () => {
 
           <!-- Pix After Redirect / Waiting status -->
           <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; text-align: center;">
-            <p style="font-size: 0.74rem; color: #fff; line-height: 1.4; margin: 0; font-weight: 600;">
-              Cobrança Pix gerada com sucesso! Clique no botão abaixo para abrir a tela oficial de pagamento:
-            </p>
             
-            <a 
-              :href="pixGeneratedData.ticketUrl" 
-              target="_blank"
-              class="btn btn-primary" 
-              style="
-                font-size: 0.82rem; 
-                padding: 0.65rem; 
-                width: 100%; 
-                display: inline-flex; 
-                align-items: center; 
-                justify-content: center; 
-                gap: 8px; 
-                text-decoration: none; 
-                background: linear-gradient(135deg, #10b981, #059669); 
-                border: none;
-                box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-                color: #fff;
-                font-weight: 700;
-              "
-            >
-              <i class="fa-solid fa-wallet"></i> ABRIR PAGAMENTO NO MERCADO PAGO 🚀
-            </a>
-            
-            <div style="display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 0.25rem;">
-              <i class="fa-solid fa-spinner fa-spin" style="color: #00f2fe; font-size: 1rem;"></i>
-              <span style="font-size: 0.72rem; color: var(--text-muted);">Aguardando confirmação de pagamento...</span>
-            </div>
+            <!-- CASE A: Official Mercado Pago Success (has ticketUrl) -->
+            <template v-if="pixGeneratedData.ticketUrl">
+              <p style="font-size: 0.74rem; color: #fff; line-height: 1.4; margin: 0; font-weight: 600;">
+                Cobrança Pix gerada com sucesso! Clique no botão abaixo para abrir a tela oficial de pagamento:
+              </p>
+              
+              <a 
+                :href="pixGeneratedData.ticketUrl" 
+                target="_blank"
+                class="btn btn-primary" 
+                style="
+                  font-size: 0.82rem; 
+                  padding: 0.65rem; 
+                  width: 100%; 
+                  display: inline-flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  gap: 8px; 
+                  text-decoration: none; 
+                  background: linear-gradient(135deg, #10b981, #059669); 
+                  border: none;
+                  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+                  color: #fff;
+                  font-weight: 700;
+                "
+              >
+                <i class="fa-solid fa-wallet"></i> ABRIR PAGAMENTO NO MERCADO PAGO 🚀
+              </a>
+              
+              <div style="display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 0.25rem;">
+                <i class="fa-solid fa-spinner fa-spin" style="color: #00f2fe; font-size: 1rem;"></i>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">Aguardando confirmação de pagamento...</span>
+              </div>
+            </template>
+
+            <!-- CASE B: Offline Fallback (no ticketUrl) -->
+            <template v-else>
+              <p style="font-size: 0.74rem; color: #ffc107; line-height: 1.4; margin: 0; font-weight: 600;">
+                <i class="fa-solid fa-triangle-exclamation"></i> Conexão MP em homologação. Utilize o QR Code ou Copia e Cola oficial para concluir a ativação:
+              </p>
+              
+              <div style="background: white; padding: 0.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center;">
+                <img 
+                  :src="pixGeneratedData.qrCode" 
+                  alt="QR Code Pix Fallback" 
+                  style="width: 160px; height: 160px; display: block; object-fit: contain;" 
+                />
+              </div>
+              
+              <button 
+                type="button" 
+                class="btn btn-secondary" 
+                style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); color: #34d399;"
+                @click="copyPixCopiaEColaDynamic"
+              >
+                <i class="fa-solid fa-copy"></i>
+                {{ pixCopied ? '✓ Código Copiado!' : 'Copiar Pix Copia e Cola' }}
+              </button>
+            </template>
+
           </div>
         </div>
 
