@@ -1418,6 +1418,47 @@ const copyToClipboard = (text, title = 'Copiado', message = 'Copiado para a áre
   showToast(title, message, 'success');
 };
 
+const detectCardBrand = (num) => {
+  if (!num) return 'CARD';
+  const clean = num.replace(/\D/g, '');
+  if (clean.startsWith('4')) return 'VISA';
+  if (/^5[1-5]/.test(clean)) return 'MASTERCARD';
+  if (/^6/.test(clean)) return 'ELO';
+  return 'CARD';
+};
+
+const formatCardNumberPreview = (num) => {
+  if (!num) return '•••• •••• •••• ••••';
+  const clean = num.replace(/\D/g, '').slice(0, 16);
+  let result = '';
+  for (let i = 0; i < 16; i++) {
+    if (i > 0 && i % 4 === 0) result += ' ';
+    result += clean[i] || '•';
+  }
+  return result;
+};
+
+const submitCardCheckout = () => {
+  checkoutPaymentMethod.value = 'card';
+  handleCheckoutPayment();
+};
+
+const submitPixCheckout = () => {
+  checkoutPaymentMethod.value = 'pix';
+  handleCheckoutPayment();
+};
+
+const copyPixCopiaEColaDynamic = () => {
+  if (pixGeneratedData.value && pixGeneratedData.value.copiaECola) {
+    navigator.clipboard.writeText(pixGeneratedData.value.copiaECola);
+    pixCopied.value = true;
+    showToast('Copiado', 'Código Pix Copia e Cola copiado com sucesso!', 'success');
+    setTimeout(() => {
+      pixCopied.value = false;
+    }, 2000);
+  }
+};
+
 const openCheckout = (plan, title = 'Upgrade Premium', price = 'R$ 29,90/mês') => {
   checkoutPlan.value = plan;
   checkoutTitle.value = title;
@@ -3076,129 +3117,132 @@ const restoreCandidate = () => {
       background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
       display: flex; align-items: center; justify-content: center; z-index: 10000;
     ">
-      <div class="glass-card" style="width: 450px; padding: 2rem; border: 1px solid rgba(59, 130, 246, 0.3);">
+      <div class="glass-card" style="width: 460px; padding: 1.75rem; border: 1px solid rgba(59, 130, 246, 0.3); max-height: 90vh; overflow-y: auto;">
         <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; text-align: center; color: #00f2fe;">{{ checkoutTitle }}</h3>
         <p style="text-align: center; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
-          Ative agora este recurso por apenas {{ checkoutPrice }}
+          Escolha a forma de pagamento por apenas {{ checkoutPrice }}
         </p>
 
-        <!-- PREMIUM TAB SWITCHER (Pix vs Card) -->
-        <div style="
-          display: flex; 
-          background: rgba(10, 15, 28, 0.95); 
-          padding: 6px; 
-          border-radius: 12px; 
-          border: 1px solid rgba(59, 130, 246, 0.15); 
-          gap: 4px; 
-          margin-bottom: 1.5rem;
-          box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
-        ">
-          <!-- Pix Tab Button -->
-          <button 
-            type="button" 
-            style="
-              flex: 1; 
-              display: flex; 
-              align-items: center; 
-              justify-content: center; 
-              gap: 8px; 
-              padding: 0.65rem; 
-              font-size: 0.82rem; 
-              font-weight: 700;
-              border-radius: 8px; 
-              cursor: pointer;
-              transition: all 0.25s ease-in-out;
-            "
-            :style="checkoutPaymentMethod === 'pix' ? {
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(0, 242, 254, 0.2))',
-              border: '1px solid rgba(0, 242, 254, 0.4) !important',
-              color: '#00f2fe',
-              textShadow: '0 0 8px rgba(0, 242, 254, 0.4)',
-              boxShadow: '0 4px 12px rgba(0, 242, 254, 0.12)'
-            } : {
-              background: 'transparent',
-              border: 'none !important',
-              color: '#64748b'
-            }"
-            @click="checkoutPaymentMethod = 'pix'"
-          >
-            <i class="fa-solid fa-pix" style="font-size: 1.15rem; filter: drop-shadow(0 0 5px rgba(0,242,254,0.3));"></i>
-            Pix Instantâneo
-          </button>
-          
-          <!-- Card Tab Button -->
-          <button 
-            type="button" 
-            style="
-              flex: 1; 
-              display: flex; 
-              align-items: center; 
-              justify-content: center; 
-              gap: 8px; 
-              padding: 0.65rem; 
-              font-size: 0.82rem; 
-              font-weight: 700;
-              border-radius: 8px; 
-              cursor: pointer;
-              transition: all 0.25s ease-in-out;
-            "
-            :style="checkoutPaymentMethod === 'card' ? {
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(0, 242, 254, 0.2))',
-              border: '1px solid rgba(0, 242, 254, 0.4) !important',
-              color: '#00f2fe',
-              textShadow: '0 0 8px rgba(0, 242, 254, 0.4)',
-              boxShadow: '0 4px 12px rgba(0, 242, 254, 0.12)'
-            } : {
-              background: 'transparent',
-              border: 'none !important',
-              color: '#64748b'
-            }"
-            @click="checkoutPaymentMethod = 'card'"
-          >
-            <i class="fa-solid fa-credit-card" style="font-size: 1rem;"></i>
-            Cartão de Crédito
-          </button>
+        <!-- SEÇÃO 1: CARTÃO DE CRÉDITO -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem;">
+          <h4 style="font-size: 0.85rem; color: #fff; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-credit-card" style="color: #3b82f6;"></i> Pagar com Cartão de Crédito
+          </h4>
+
+          <!-- Live Card Preview -->
+          <div style="
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            border-radius: 10px; 
+            padding: 1rem; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+            height: 125px;
+            margin-bottom: 0.75rem;
+            position: relative;
+            overflow: hidden;
+          ">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; z-index: 1;">
+              <span style="font-weight: 800; color: #3b82f6; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase;">
+                {{ detectCardBrand(checkoutCard.number) }}
+              </span>
+              <i class="fa-solid fa-signal" style="color: rgba(255,255,255,0.15); font-size: 0.75rem;"></i>
+            </div>
+            
+            <div style="font-family: monospace; font-size: 1.05rem; color: #fff; letter-spacing: 0.12em; margin: 0.4rem 0; z-index: 1;">
+              {{ formatCardNumberPreview(checkoutCard.number) }}
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; z-index: 1;">
+              <div>
+                <div style="font-size: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Titular</div>
+                <div style="font-size: 0.7rem; font-weight: 600; color: #fff; text-transform: uppercase; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  {{ checkoutCard.name || 'NOME NO CARTÃO' }}
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 0.5rem; text-transform: uppercase; color: var(--text-muted);">Validade</div>
+                <div style="font-size: 0.7rem; font-weight: 600; color: #fff;">{{ checkoutCard.expiry || 'MM/AA' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form inputs -->
+          <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(0, 242, 254, 0.03); padding: 0.4rem 0.6rem; border-radius: 6px; border: 1px solid rgba(0, 242, 254, 0.1); margin-bottom: 0.1rem;">
+              <i class="fa-solid fa-shield-halved" style="color: #00f2fe; font-size: 0.85rem;"></i>
+              <span style="font-size: 0.68rem; color: var(--text-secondary);">Dados protegidos com criptografia SSL.</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr; gap: 0.4rem;">
+              <input type="text" class="form-input" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" v-model="checkoutCard.number" placeholder="Número do Cartão" required />
+              <input type="text" class="form-input" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" v-model="checkoutCard.name" placeholder="Nome Completo do Titular" required />
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
+              <input type="text" class="form-input" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" v-model="checkoutCard.expiry" placeholder="Validade (MM/AA)" required />
+              <input type="password" class="form-input" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" v-model="checkoutCard.cvc" placeholder="CVV" maxlength="4" required />
+            </div>
+            <button 
+              type="button" 
+              class="btn btn-primary" 
+              style="font-size: 0.75rem; padding: 0.5rem; width: 100%; margin-top: 0.25rem;"
+              @click="submitCardCheckout"
+            >
+              🔒 Pagar Assinatura com Cartão
+            </button>
+          </div>
         </div>
 
-        <!-- Pix Area (Banco Central BR Code) -->
-        <div v-if="checkoutPaymentMethod === 'pix'" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.15); text-align: center; width: 100%;">
-          
-          <!-- STEP 1: Before Generating -->
-          <template v-if="!pixGeneratedData">
-            <div style="background: rgba(0, 242, 254, 0.05); padding: 1rem; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
-              <i class="fa-solid fa-pix" style="font-size: 2.2rem; color: #00f2fe; filter: drop-shadow(0 0 8px rgba(0,242,254,0.4));"></i>
-              <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Pagamento Integrado via Mercado Pago</span>
-              <p style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-                Ao avançar, geraremos a cobrança Pix oficial com QR Code e Chave Copia e Cola em tempo real.
-              </p>
-            </div>
-          </template>
+        <!-- DIVIDER -->
+        <div style="text-align: center; margin: 0.75rem 0; font-size: 0.72rem; color: var(--text-muted); position: relative;">
+          <span style="background: #0d1426; padding: 0 8px; position: relative; z-index: 1;">OU</span>
+          <div style="position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid rgba(255,255,255,0.06); z-index: 0;"></div>
+        </div>
 
-          <!-- STEP 2: After Generating -->
-          <template v-else>
-            <div style="background: white; padding: 0.75rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center; margin-bottom: 0.25rem;">
+        <!-- SEÇÃO 2: PIX MERCADO PAGO -->
+        <div style="background: rgba(0, 242, 254, 0.02); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 12px; padding: 1rem;">
+          <h4 style="font-size: 0.85rem; color: #fff; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-pix" style="color: #00f2fe;"></i> Pagar com Pix (Mercado Pago)
+          </h4>
+
+          <!-- Pix Before Generating -->
+          <div v-if="!pixGeneratedData" style="display: flex; flex-direction: column; gap: 0.5rem; text-align: center;">
+            <p style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+              Gere uma cobrança oficial em tempo real e pague instantaneamente por QR Code ou chave Copia e Cola.
+            </p>
+            <button 
+              type="button" 
+              class="btn btn-secondary" 
+              style="font-size: 0.75rem; padding: 0.5rem; width: 100%; border-color: rgba(0,242,254,0.3); background: rgba(0,242,254,0.05); color: #00f2fe;"
+              @click="submitPixCheckout"
+            >
+              🚀 Gerar Cobrança Pix no Mercado Pago
+            </button>
+          </div>
+
+          <!-- Pix After Generating -->
+          <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center;">
+            <div style="background: white; padding: 0.5rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.25); display: flex; justify-content: center; align-items: center;">
               <img 
                 :src="pixGeneratedData.qrCode" 
                 alt="QR Code Pix Oficial" 
-                style="width: 220px; height: 220px; display: block; object-fit: contain;" 
+                style="width: 160px; height: 160px; display: block; object-fit: contain;" 
               />
             </div>
-            <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 0.25rem 0; line-height: 1.3;">
-              Dica: Se a câmera do celular tiver dificuldades para escanear, copie o código <b>Copia e Cola</b> abaixo e cole-o diretamente no app do seu banco!
+            <p style="font-size: 0.68rem; color: var(--text-muted); margin: 0; line-height: 1.3;">
+              Copie o código Copia e Cola abaixo ou abra no Mercado Pago:
             </p>
             
             <button 
               type="button" 
               class="btn btn-secondary" 
-              style="font-size: 0.8rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); color: #34d399;"
-              @click="() => {
-                navigator.clipboard.writeText(pixGeneratedData.copiaECola);
-                pixCopied = true;
-                showToast('Copiado', 'Código Pix Copia e Cola copiado com sucesso!', 'success');
-              }"
+              style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); color: #34d399;"
+              @click="copyPixCopiaEColaDynamic"
             >
               <i class="fa-solid fa-copy"></i>
-              {{ pixCopied ? '✓ Código Copiado!' : 'Copiar Código Copia e Cola' }}
+              {{ pixCopied ? '✓ Código Copiado!' : 'Copiar Pix Copia e Cola' }}
             </button>
 
             <a 
@@ -3206,69 +3250,16 @@ const restoreCandidate = () => {
               :href="pixGeneratedData.ticketUrl" 
               target="_blank"
               class="btn btn-secondary" 
-              style="font-size: 0.8rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
+              style="font-size: 0.72rem; padding: 0.4rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; border-color: rgba(0, 242, 254, 0.3); color: #00f2fe; background: rgba(0, 242, 254, 0.05);"
             >
               <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir tela do Mercado Pago
             </a>
-          </template>
-          
-          <div style="display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); justify-content: center; margin-top: 0.25rem;">
-            <i class="fa-solid fa-lock" style="color: var(--color-success);"></i> Conexão SSL 100% Protegida
-          </div>
-        </div>
-
-        <!-- Card Area -->
-        <div v-else style="display: flex; flex-direction: column; gap: 0.9rem;">
-          <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 242, 254, 0.05); padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); margin-bottom: 0.25rem;">
-            <i class="fa-solid fa-shield-halved" style="color: #00f2fe; font-size: 1.1rem;"></i>
-            <span style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.3;">Seus dados de cartão são protegidos com criptografia SSL.</span>
-          </div>
-
-          <div class="form-group" style="margin: 0;">
-            <label>Número do Cartão</label>
-            <input type="text" class="form-input" v-model="checkoutCard.number" placeholder="4532 7182 9182 0019" required />
-          </div>
-          
-          <div class="form-group" style="margin: 0;">
-            <label>Nome Completo do Titular</label>
-            <input type="text" class="form-input" v-model="checkoutCard.name" placeholder="FATE CANDIDATE" required />
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 0.5rem;">
-            <div class="form-group" style="margin: 0;">
-              <label>Validade (MM/AA)</label>
-              <input type="text" class="form-input" v-model="checkoutCard.expiry" placeholder="12/28" required />
-            </div>
-            <div class="form-group" style="margin: 0;">
-              <label>CVV / Código</label>
-              <input type="password" class="form-input" v-model="checkoutCard.cvc" placeholder="123" maxlength="4" required />
-            </div>
-          </div>
-        </div>
-
-        <!-- Reassurance security banner -->
-        <div style="display: flex; gap: 0.75rem; background: rgba(16, 185, 129, 0.05); padding: 0.85rem 1.1rem; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.2); margin-top: 0.85rem; text-align: left; align-items: flex-start;">
-          <i class="fa-solid fa-shield-halved" style="color: var(--color-success); font-size: 1.2rem; margin-top: 0.15rem; filter: drop-shadow(0 0 5px rgba(16,185,129,0.3));"></i>
-          <div>
-            <span style="font-size: 0.78rem; font-weight: 700; color: #fff; display: block; margin-bottom: 0.1rem;">Transação 100% Segura & Protegida</span>
-            <p style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin: 0;">
-              Seus dados de pagamento são transmitidos sob criptografia SSL de ponta a ponta. Nós não armazenamos as informações do seu cartão de crédito.
-            </p>
           </div>
         </div>
 
         <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
-          <button 
-            v-if="checkoutPaymentMethod === 'card' || !pixGeneratedData"
-            type="button" 
-            class="btn btn-primary" 
-            style="flex: 1;" 
-            @click="handleCheckoutPayment"
-          >
-            {{ checkoutPaymentMethod === 'card' ? 'Finalizar Assinatura 🔒' : 'Gerar Pix no Mercado Pago 🚀' }}
-          </button>
           <button type="button" class="btn btn-secondary" style="flex: 1;" @click="checkoutOpen = false">
-            {{ pixGeneratedData ? 'Fechar' : 'Voltar' }}
+            Fechar Janela
           </button>
         </div>
       </div>
@@ -6499,42 +6490,7 @@ const restoreCandidate = () => {
                     </div>
                   </div>
 
-                  <!-- Pix Active Billing Panel (Mostra em baixo sem precisar clicar) -->
-                  <div 
-                    style="margin-top: 1.5rem; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; gap: 1.5rem;"
-                  >
-                    <div style="background: white; padding: 0.5rem; border-radius: 8px; display: flex; justify-content: center; align-items: center; width: 110px; height: 110px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
-                      <img 
-                        :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(generatePixPayload(config.pix_key || '109.472.439-41', 9.90))}`" 
-                        alt="QR Code Pix"
-                        style="width: 95px; height: 95px; object-fit: contain;"
-                      />
-                    </div>
-                    
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 0.35rem;">
-                      <span style="font-size: 0.85rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
-                        <i class="fa-solid fa-pix" style="color: #00f2fe;"></i> Dados para Pagamento e Renovação Pix
-                      </span>
-                      <p style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
-                        Use o QR Code ao lado ou copie o código Pix Copia e Cola para realizar o pagamento ou renovação mensal do seu plano.
-                      </p>
-                      
-                      <div style="display: flex; gap: 12px; align-items: center; margin-top: 0.25rem; flex-wrap: wrap;">
-                        <button 
-                          type="button"
-                          class="btn btn-secondary" 
-                          style="font-size: 0.72rem; padding: 0.3rem 0.6rem; display: inline-flex; align-items: center; gap: 4px; border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.05); color: #34d399;"
-                          @click="copyToClipboard(generatePixPayload(config.pix_key || '109.472.439-41', 9.90), 'Código Copiado', 'Código Pix Copia e Cola copiado com sucesso!')"
-                        >
-                          <i class="fa-solid fa-copy"></i> Copiar Pix Copia e Cola
-                        </button>
-                        
-                        <div style="font-size: 0.74rem; color: var(--text-muted);">
-                          Chave Pix: <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 2px 6px; border-radius: 4px;">{{ maskedPixKey }}</code>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+
                   
                   <!-- Histórico de Transações -->
                   <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
