@@ -1622,50 +1622,32 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         "X-Idempotency-Key": secrets.token_hex(16),
     }
 
-    # Restringe o checkout do Mercado Pago para aceitar APENAS Pix
     body = {
-        "items": [{
-            "title": plan["title"],
-            "quantity": 1,
-            "currency_id": plan["currency"],
-            "unit_price": plan["amount"],
-        }],
+        "transaction_amount": plan["amount"],
+        "description": f"{plan['title']} — VagaSync",
+        "payment_method_id": "pix",
         "payer": {
             "email": payload.user_email,
-        },
-        "payment_methods": {
-            "excluded_payment_types": [
-                {"id": "credit_card"},
-                {"id": "debit_card"},
-                {"id": "ticket"}
-            ]
-        },
-        "back_urls": {
-            "success": "https://vagasync.com.br/?payment=success",
-            "failure": "https://vagasync.com.br/?payment=failure",
-            "pending": "https://vagasync.com.br/?payment=pending",
-        },
-        "auto_return": "approved",
-        "notification_url": "https://vagasync.com.br/api/payments/webhook",
-        "metadata": {
-            "plan_id": payload.plan_id,
-            "user_email": payload.user_email,
+            "first_name": payload.user_name.split()[0] if payload.user_name else "Cliente",
         }
     }
 
     try:
         resp = requests.post(
-            "https://api.mercadopago.com/checkout/preferences",
+            "https://api.mercadopago.com/v1/payments",
             headers=headers,
             json=body,
-            timeout=15
+            timeout=12
         )
         data = resp.json()
         if resp.status_code not in (200, 201):
-            raise Exception(f"Mercado Pago Preference Error: {data.get('message', str(data))}")
+            raise Exception(f"Mercado Pago Transparent Payment Error: {data.get('message', str(data))}")
 
-        checkout_url = data.get("init_point")
-        preference_id = data.get("id")
+        payment_id = data.get("id")
+        pix_data = data.get("point_of_interaction", {}).get("transaction_data", {})
+        ticket_url = data.get("transaction_details", {}).get("ticket_url") or pix_data.get("ticket_url", "")
+        qr_code = pix_data.get("qr_code", "")
+        qr_code_base64 = pix_data.get("qr_code_base64", "")
 
         # Salva transação pendente
         tx = FinancialTransaction(
@@ -1681,11 +1663,11 @@ def create_pix_payment(payload: PaymentRequest, db: Session = Depends(get_db)):
         db.refresh(tx)
 
         return {
-            "payment_id": preference_id,
+            "payment_id": payment_id,
             "transaction_id": tx.id,
-            "qr_code": "",
-            "qr_code_base64": "",
-            "ticket_url": checkout_url,  # O frontend direciona para essa URL oficial da página
+            "qr_code": qr_code,
+            "qr_code_base64": qr_code_base64,
+            "ticket_url": ticket_url,
             "amount": plan["amount"],
             "title": plan["title"],
             "status": "pending"
