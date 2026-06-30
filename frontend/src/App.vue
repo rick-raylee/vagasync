@@ -691,8 +691,7 @@ const saveCredentialsAndLoginReal = async () => {
 
 const handleLinkedinLogin = () => {
   if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
-    showToast('Configuração Requerida', 'Por favor, configure suas chaves do LinkedIn para prosseguir com o login real.', 'info');
-    showLinkedinOAuthModal.value = true;
+    showToast('LinkedIn em Manutenção', 'O login social com LinkedIn está sendo ativado pelo administrador. Por favor, acesse usando e-mail e senha.', 'info');
   } else {
     window.location.href = `${API_BASE}/linkedin/login`;
   }
@@ -2113,7 +2112,10 @@ const adminConfigs = ref({
   seo_keywords: 'recrutamento, ia, vagas, curricular',
   plans_json: '[]',
   coupons_json: '[]',
-  allow_domain_signup: 'false'
+  allow_domain_signup: 'false',
+  linkedin_client_id: '',
+  linkedin_client_secret: '',
+  linkedin_cookie: ''
 });
 const auditLogs = ref([
   { id: 1, timestamp: new Date().toISOString(), action: 'LOGIN', details: 'Autenticação bem sucedida do admin', ip_address: '127.0.0.1' }
@@ -3065,92 +3067,7 @@ const restoreCandidate = () => {
       </div>
     </div>
 
-    <!-- LinkedIn OAuth Setup Modal -->
-    <div v-if="showLinkedinOAuthModal" class="modal-overlay" style="
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(3, 5, 12, 0.97); backdrop-filter: blur(16px);
-      display: flex; align-items: center; justify-content: center; z-index: 10000;
-      overflow-y: auto; padding: 1rem;
-    ">
-      <div class="glass-card" style="width: 500px; padding: 2rem; border: 1px solid rgba(10, 102, 194, 0.4); display: flex; flex-direction: column; gap: 1.25rem; max-height: 95vh; overflow-y: auto; box-shadow: 0 0 60px rgba(10,102,194,0.15);">
-        
-        <!-- Header -->
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="background: linear-gradient(135deg, #0a66c2, #0077b5); width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-            <i class="fa-brands fa-linkedin" style="color: #fff; font-size: 1.4rem;"></i>
-          </div>
-          <div>
-            <h3 style="font-size: 1.15rem; margin: 0; color: #fff;">Conectar com LinkedIn</h3>
-            <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 2px 0 0;">OAuth 2.0 — Login seguro e real</p>
-          </div>
-        </div>
 
-        <!-- Instrução passo a passo -->
-        <div style="background: rgba(10, 102, 194, 0.08); border: 1px solid rgba(10, 102, 194, 0.2); border-radius: 10px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
-          <div style="font-size: 0.82rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem;">📋 Como configurar em 3 passos:</div>
-          <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;">
-            <strong style="color:#fff;">1.</strong> Acesse
-            <a href="https://www.linkedin.com/developers/apps" target="_blank" style="color: #60a5fa; text-decoration: underline;">linkedin.com/developers/apps</a>
-            e crie ou selecione seu app.<br>
-            <strong style="color:#fff;">2.</strong> Em <em>Auth</em>, adicione esta URL de callback:<br>
-            <code style="background: rgba(0,0,0,0.4); color: #00f2fe; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; word-break: break-all;">https://vagasync.com.br/api/linkedin/callback</code><br>
-            <strong style="color:#fff;">3.</strong> Copie o <strong style="color:#fff;">Client ID</strong> e o <strong style="color:#fff;">Client Secret</strong> abaixo.
-          </div>
-        </div>
-
-        <!-- Campos OAuth -->
-        <div class="form-group" style="margin: 0;">
-          <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">LinkedIn Client ID</label>
-          <input 
-            type="text" 
-            class="form-input" 
-            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; font-family: monospace;" 
-            v-model="config.linkedin_client_id" 
-            placeholder="Ex: 78abc123def456..."
-            autocomplete="off"
-          />
-        </div>
-
-        <div class="form-group" style="margin: 0;">
-          <label style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.3rem; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">LinkedIn Client Secret</label>
-          <input 
-            type="password" 
-            class="form-input" 
-            style="font-size: 0.85rem; padding: 0.5rem 0.75rem; font-family: monospace;" 
-            v-model="config.linkedin_client_secret" 
-            placeholder="••••••••••••••••"
-            autocomplete="new-password"
-          />
-        </div>
-
-        <!-- Botão principal -->
-        <button 
-          type="button" 
-          class="btn btn-primary" 
-          style="background: linear-gradient(135deg, #0a66c2, #0077b5); border: none; color: #fff; font-weight: 700; padding: 0.75rem; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px;" 
-          @click="saveCredentialsAndLoginReal"
-        >
-          <i class="fa-brands fa-linkedin"></i> Salvar e Entrar com LinkedIn
-        </button>
-
-        <!-- Divisor -->
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
-          <span style="font-size: 0.72rem; color: var(--text-muted);">ou entre sem LinkedIn</span>
-          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
-        </div>
-
-        <!-- Botão fechar / usar email -->
-        <button 
-          type="button" 
-          class="btn btn-secondary" 
-          style="padding: 0.6rem; font-size: 0.85rem;"
-          @click="showLinkedinOAuthModal = false;"
-        >
-          Usar e-mail e senha
-        </button>
-      </div>
-    </div>
 
 
     <!-- Checkout Modals (Stripe / Pix checkout simulation) -->
@@ -7135,11 +7052,11 @@ const restoreCandidate = () => {
                       </div>
                       <div class="form-group" style="margin-bottom: 1rem;">
                         <label>LinkedIn Client ID</label>
-                        <input type="text" class="form-input" v-model="config.linkedin_client_id" placeholder="Client ID..." />
+                        <input type="text" class="form-input" v-model="adminConfigs.linkedin_client_id" placeholder="Client ID..." />
                       </div>
                       <div class="form-group" style="margin-bottom: 1rem;">
                         <label>LinkedIn Client Secret</label>
-                        <input type="password" class="form-input" v-model="config.linkedin_client_secret" placeholder="Client Secret..." />
+                        <input type="password" class="form-input" v-model="adminConfigs.linkedin_client_secret" placeholder="Client Secret..." />
                       </div>
                       <div style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.9rem; line-height: 1.7;">
                         <strong style="color: var(--text-primary); display: block; margin-bottom: 0.2rem;">Como obter o Cookie de sessão (li_at):</strong>
@@ -7148,7 +7065,7 @@ const restoreCandidate = () => {
                           <li>Pressione F12 -> Application -> Cookies -> linkedin.com -> copie <code>li_at</code>.</li>
                         </ol>
                       </div>
-                      <input type="password" class="form-input" v-model="config.linkedin_cookie" placeholder="Cole o cookie 'li_at' aqui..." />
+                      <input type="password" class="form-input" v-model="adminConfigs.linkedin_cookie" placeholder="Cole o cookie 'li_at' aqui..." />
                     </div>
 
                     <div style="display: flex; justify-content: flex-end; margin-top: 2rem;">
