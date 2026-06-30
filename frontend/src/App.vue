@@ -721,9 +721,26 @@ const handleLinkedinCallback = () => {
 
 const handleSignup = (e) => {
   e.preventDefault();
+  
+  // 1. Validador de E-mail
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(authForm.value.email)) {
+  const emailVal = (authForm.value.email || '').trim();
+  if (!emailRegex.test(emailVal)) {
     showToast('E-mail Inválido', 'Por favor, insira um e-mail no formato correto (exemplo@dominio.com).', 'error');
+    return;
+  }
+
+  // 2. Validador de Senha
+  const passwordVal = authForm.value.password || '';
+  if (passwordVal.length < 6) {
+    showToast('Senha Fraca', 'A senha deve conter no mínimo 6 caracteres.', 'error');
+    return;
+  }
+
+  const hasLetter = /[a-zA-Z]/.test(passwordVal);
+  const hasNumber = /[0-9]/.test(passwordVal);
+  if (!hasLetter || !hasNumber) {
+    showToast('Senha Simples', 'A senha deve conter pelo menos uma letra e um número para sua segurança.', 'error');
     return;
   }
 
