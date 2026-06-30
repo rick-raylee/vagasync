@@ -49,7 +49,8 @@ const config = ref({
   resume_text: '',
   search_location: 'Brasil',
   search_scope: 'pais',
-  enable_web_search: 'true'
+  enable_web_search: 'true',
+  allow_domain_signup: 'false'
 });
 
 const notifyChannels = ref(null);
@@ -724,9 +725,19 @@ const handleSignup = (e) => {
   
   // 1. Validador de E-mail
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const emailVal = (authForm.value.email || '').trim();
+  const emailVal = (authForm.value.email || '').trim().toLowerCase();
   if (!emailRegex.test(emailVal)) {
     showToast('E-mail Inválido', 'Por favor, insira um e-mail no formato correto (exemplo@dominio.com).', 'error');
+    return;
+  }
+
+  // 1.1 Bloqueio de e-mails corporativos do domínio (se configurado como bloqueado)
+  const isDomainEmail = emailVal.endsWith('@vagasync.com') || emailVal.endsWith('@vagasync.com.br');
+  const isAllowedTestEmail = ['admin@vagasync.com', 'recrutador@vagasync.com', 'candidato@vagasync.com'].includes(emailVal);
+  const allowDomainSignup = config.value.allow_domain_signup === 'true';
+
+  if (isDomainEmail && !isAllowedTestEmail && !allowDomainSignup) {
+    showToast('Cadastro Não Permitido', 'Cadastros com e-mails institucionais do domínio vagasync.com estão desativados. Use um e-mail pessoal (ex: Gmail, Outlook).', 'error');
     return;
   }
 
@@ -2101,7 +2112,8 @@ const adminConfigs = ref({
   seo_description: 'Sua carreira impulsionada por IA.',
   seo_keywords: 'recrutamento, ia, vagas, curricular',
   plans_json: '[]',
-  coupons_json: '[]'
+  coupons_json: '[]',
+  allow_domain_signup: 'false'
 });
 const auditLogs = ref([
   { id: 1, timestamp: new Date().toISOString(), action: 'LOGIN', details: 'Autenticação bem sucedida do admin', ip_address: '127.0.0.1' }
@@ -5405,6 +5417,29 @@ const restoreCandidate = () => {
               <button class="btn btn-primary" style="background: var(--color-success); border: none; color: white;" @click="handleTriggerBackup">
                 <i class="fa-solid fa-download-solid"></i> Disparar Backup
               </button>
+            </div>
+
+            <!-- Controle de E-mails do Domínio -->
+            <div class="glass-card" style="display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(59, 130, 246, 0.3); background: rgba(59, 130, 246, 0.03);">
+              <div>
+                <h3 style="color: var(--color-secondary); font-size: 1.15rem; margin: 0; display: flex; align-items: center; gap: 6px;">
+                  <i class="fa-solid fa-envelope-circle-check"></i> E-mails com Domínio do Sistema (@vagasync.com)
+                </h3>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.25rem; line-height: 1.5; max-width: 580px;">
+                  Quando definido como <strong>Bloqueado</strong>, novos cadastros usando os domínios corporativos (<code>@vagasync.com</code> ou <code>@vagasync.com.br</code>) são desativados para evitar contas falsas. Apenas e-mails padrão de teste são permitidos.
+                </p>
+              </div>
+              <div style="display: flex; align-items: center;">
+                <select 
+                  class="form-input" 
+                  v-model="adminConfigs.allow_domain_signup" 
+                  style="width: 140px; background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 6px; font-size: 0.85rem;"
+                  @change="handleSaveAdminConfigs"
+                >
+                  <option value="false">🚫 Bloqueado</option>
+                  <option value="true">✅ Liberado</option>
+                </select>
+              </div>
             </div>
 
             <!-- Audit trail listing -->

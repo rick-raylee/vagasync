@@ -261,11 +261,11 @@ class AdminConfigUpdate(BaseModel):
     bank_owner_name: Optional[str] = None
     owner_tax_id: Optional[str] = None
     
-    # Plans & Coupons
     plans_json: Optional[str] = None
     coupons_json: Optional[str] = None
     linkedin_client_id: Optional[str] = None
     linkedin_client_secret: Optional[str] = None
+    allow_domain_signup: Optional[str] = None
     
     # Integrations & Notification Settings
     whatsapp_phone: Optional[str] = None
@@ -328,7 +328,8 @@ def get_config(db: Session = Depends(get_db)):
         "search_scope": "pais",
         "enable_web_search": "true",
         "pix_key": "",
-        "stripe_public_key": ""
+        "stripe_public_key": "",
+        "allow_domain_signup": "false"
     }
     for key, val in defaults.items():
         if key not in config_dict:
@@ -1444,7 +1445,8 @@ def admin_get_config(admin: dict = Depends(get_current_admin), db: Session = Dep
         "smtp_host": "smtp.gmail.com",
         "smtp_port": "465",
         "notify_email": "",
-        "generic_webhook_url": ""
+        "generic_webhook_url": "",
+        "allow_domain_signup": "false"
     }
     
     for k, v in defaults.items():
