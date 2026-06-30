@@ -3847,6 +3847,13 @@ const restoreCandidate = () => {
           </button>
           
           <button 
+            :class="['nav-link-btn', { active: activeTab === 'candidate_billing' }]"
+            @click="activeTab = 'candidate_billing'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color: #eab308; flex-shrink: 0;"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg> Faturamento & Planos
+          </button>
+          
+          <button 
             :class="['nav-link-btn', { active: activeTab === 'config' }]"
             @click="activeTab = 'config'"
           >
@@ -7294,6 +7301,142 @@ const restoreCandidate = () => {
                   <button type="button" class="btn btn-secondary" @click="showChangeCardModal = false">Voltar</button>
                   <button type="button" class="btn btn-primary" @click="() => { showChangeCardModal = false; openCheckout('candidate_premium', 'Atualizar Assinatura', 'R$ 9,90/mês'); }">Abrir Checkout Seguro 🔒</button>
                 </div>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- ── Aba Faturamento & Planos (Candidato) ── -->
+        <template v-if="activeTab === 'candidate_billing'">
+          <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+            
+            <div class="glass-card" style="position: relative; overflow: hidden; border-left: 4px solid var(--color-secondary); padding: 2rem;">
+              <div style="position: absolute; top: -50px; right: -50px; width: 150px; height: 150px; background: radial-gradient(circle, rgba(0, 242, 254, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+              
+              <h3 style="margin: 0 0 1.25rem 0; font-size: 1.3rem; color: #fff; display: flex; align-items: center; gap: 10px;">
+                <i class="fa-solid fa-credit-card" style="color: var(--color-secondary); font-size: 1.5rem;"></i> Gestão de Assinatura & Faturamento
+              </h3>
+              
+              <!-- Alerta de Vencimento Pix -->
+              <div v-if="pixDaysLeft !== null && pixDaysLeft <= 5 && pixDaysLeft >= 0" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 10px; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); margin-bottom: 1.25rem;">
+                <i class="fa-solid fa-triangle-exclamation" style="color: var(--color-warning); font-size: 1.1rem; flex-shrink: 0;"></i>
+                <div style="flex: 1;">
+                  <span style="font-size: 0.8rem; font-weight: 700; color: var(--color-warning);">Assinatura Pix próxima do vencimento!</span>
+                  <p style="font-size: 0.74rem; color: var(--text-secondary); margin-top: 0.1rem; line-height: 1.4;">
+                    Seu plano via Pix vence em <strong>{{ pixDaysLeft }} {{ pixDaysLeft === 1 ? 'dia' : 'dias' }}</strong>. Renove agora para continuar usando sem interrupções.
+                  </p>
+                </div>
+                <button type="button" class="btn btn-primary" style="font-size: 0.75rem; padding: 0.35rem 0.75rem; background: var(--color-warning); border-color: var(--color-warning); color: #000; font-weight: 700;" @click="openCheckout('candidate_premium', 'Renovar Plano IA', 'R$ 9,90/mês')">
+                  Renovar Assinatura
+                </button>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 2rem; margin-top: 1rem; align-items: start;">
+                <div>
+                  <div style="font-size: 1.4rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    Plano IA Avançada VagaSync
+                    <span style="font-size: 0.72rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 20px; background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.25);">ATIVO</span>
+                  </div>
+                  <p style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.75rem; line-height: 1.6;">
+                    Acesso completo e ilimitado ao copiloto de busca de vagas por IA, candidaturas automáticas multi-canal e geocodificação no Radar de Vagas.
+                  </p>
+                  <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1.25rem; font-size: 0.85rem; color: var(--text-secondary);">
+                    <div><strong style="color: var(--text-muted);">Valor do Plano:</strong> R$ 9,90 / mês</div>
+                    <div><strong style="color: var(--text-muted);">Próxima renovação:</strong> 28 de Julho de 2026</div>
+                    <div><strong style="color: var(--text-muted);">Forma de pagamento ativa:</strong> {{ transactionHistory.length > 0 && transactionHistory[0].payment_method === 'pix' ? 'Pix Instantâneo' : 'Cartão de Crédito' }}</div>
+                  </div>
+                </div>
+                
+                <!-- Cartão Fictício Estilizado (Netflix Style) -->
+                <div style="background: linear-gradient(135deg, #0e1628 0%, #060913 100%); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.3); height: 160px;">
+                  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <span style="font-weight: 700; color: #3b82f6; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase;">{{ cardBrand || 'CARD' }}</span>
+                    <i class="fa-solid fa-signal" style="color: rgba(255,255,255,0.2); font-size: 0.9rem;"></i>
+                  </div>
+                  <div style="font-family: monospace; font-size: 1.1rem; color: #fff; letter-spacing: 0.15em; margin: 1rem 0;">
+                    •••• •••• •••• {{ cardLast4 || '8899' }}
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <div style="font-size: 0.6rem; text-transform: uppercase; color: var(--text-muted);">Validade</div>
+                      <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">{{ cardExpiry || '12/28' }}</div>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="btn btn-secondary" 
+                      style="font-size: 0.72rem; padding: 0.35rem 0.7rem; border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);"
+                      @click="showChangeCardModal = true"
+                    >
+                      Alterar Cartão
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Ações do Plano -->
+              <div style="border-top: 1px solid var(--border-color); margin-top: 1.75rem; padding-top: 1rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button 
+                  type="button" 
+                  class="btn btn-secondary" 
+                  style="font-size: 0.78rem; color: var(--color-error); border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02);"
+                  @click="showToast('Cancelamento', 'Para cancelar seu plano de R$ 9,90/mês, por favor entre em contato com o suporte financeiro.', 'info')"
+                >
+                  Cancelar Assinatura
+                </button>
+                <button 
+                  type="button" 
+                  class="btn btn-primary" 
+                  style="font-size: 0.78rem; padding: 0.45rem 1.25rem; background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; border: none;"
+                  @click="openCheckout('candidate_premium', 'Renovar Plano IA', 'R$ 9,90/mês')"
+                >
+                  Realizar Novo Upgrade / Pix
+                </button>
+              </div>
+            </div>
+
+            <!-- Histórico de Transações -->
+            <div class="glass-card" style="padding: 2rem;">
+              <h4 style="font-size: 1.05rem; margin-top: 0; margin-bottom: 1rem; color: #fff; display: flex; gap: 8px; align-items: center;">
+                <i class="fa-solid fa-clock-rotate-left" style="color: var(--color-secondary);"></i> Histórico de Transações (Cartão / Pix)
+              </h4>
+              
+              <div v-if="transactionHistory.length === 0" style="padding: 2rem; text-align: center; background: rgba(255,255,255,0.015); border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
+                Nenhuma transação registrada.
+              </div>
+              
+              <div v-else style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.15);">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-secondary); font-weight: 600;">
+                      <th style="padding: 0.8rem 1rem;">Plano / Recurso</th>
+                      <th style="padding: 0.8rem 1rem;">Data</th>
+                      <th style="padding: 0.8rem 1rem;">Método</th>
+                      <th style="padding: 0.8rem 1rem;">Valor</th>
+                      <th style="padding: 0.8rem 1rem;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="tx in transactionHistory" :key="tx.id" style="border-bottom: 1px solid var(--border-color); color: var(--text-primary); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.01)'" onmouseout="this.style.backgroundColor='transparent'">
+                      <td style="padding: 0.8rem 1rem; font-weight: 600; color: #fff;">{{ tx.plan_name }}</td>
+                      <td style="padding: 0.8rem 1rem; color: var(--text-secondary);">{{ new Date(tx.created_at).toLocaleDateString('pt-BR') }}</td>
+                      <td style="padding: 0.8rem 1rem; text-transform: uppercase;">{{ tx.payment_method === 'card' ? '💳 Cartão' : '⚡ Pix' }}</td>
+                      <td style="padding: 0.8rem 1rem; font-weight: 700; color: var(--color-secondary);">R$ {{ tx.amount.toFixed(2).replace('.', ',') }}</td>
+                      <td style="padding: 0.8rem 1rem;">
+                        <span :style="{
+                          background: tx.status === 'paid' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                          color: tx.status === 'paid' ? 'var(--color-success)' : 'var(--color-warning)',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.72rem',
+                          fontWeight: '700'
+                        }">
+                          {{ tx.status === 'paid' ? 'Pago' : 'Pendente' }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
