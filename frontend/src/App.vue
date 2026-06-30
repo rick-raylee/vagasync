@@ -3472,41 +3472,11 @@ const restoreCandidate = () => {
         <!-- Right panel: Login/Signup Card -->
         <div class="auth-right">
           <div class="glass-card auth-form-card">
-            <!-- Owner/Admin Access Button -->
-            <div style="
-              background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), rgba(59, 130, 246, 0.1));
-              border: 2px solid rgba(0, 242, 254, 0.3);
-              border-radius: 12px;
-              padding: 1rem;
-              margin-bottom: 1.5rem;
-              text-align: center;
-            ">
-              <button
-                type="button"
-                @click="secretLoginOpen = true"
-                style="
-                  background: linear-gradient(135deg, #00f2fe, #3b82f6);
-                  color: #060913;
-                  border: none;
-                  padding: 0.75rem 1.5rem;
-                  border-radius: 8px;
-                  font-weight: 700;
-                  cursor: pointer;
-                  width: 100%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 0.5rem;
-                  font-size: 0.95rem;
-                  transition: all 0.2s;
-                "
-                @mouseover="(e) => e.target.style.transform = 'translateY(-2px)'"
-                @mouseout="(e) => e.target.style.transform = 'translateY(0)'"
-              >
-                <i class="fa-solid fa-user-shield"></i> Acessar Painel do Proprietário
-              </button>
-              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem;">
-                💡 Dica: Você também pode usar Shift+O
+            <!-- Logo do VagaSync no topo do Card -->
+            <div style="text-align: center; margin-bottom: 2rem; margin-top: 0.5rem;">
+              <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.5rem;" />
+              <div style="font-size: 1.6rem; font-weight: 800; color: #fff; background: linear-gradient(135deg, #00f2fe, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.02em;">
+                Vaga Sync
               </div>
             </div>
 
