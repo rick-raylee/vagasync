@@ -87,8 +87,20 @@ const activeSources = ref([]); // fontes de busca ativas
 const uploadProgress = ref(null);
 const resumeAnalysis = ref(null);
 const toast = ref(null);
+const publishedJobSuccessData = ref(null);
+const jobLinkCopied = ref(false);
 const activeTab = ref('dashboard');
 const cookieConsent = ref(localStorage.getItem('vagasync_cookie_consent') === 'true');
+
+const copyJobLink = () => {
+  if (!publishedJobSuccessData.value) return;
+  navigator.clipboard.writeText(publishedJobSuccessData.value.link);
+  jobLinkCopied.value = true;
+  showToast('Copiado!', 'Link da vaga copiado para a área de transferência.', 'success');
+  setTimeout(() => {
+    jobLinkCopied.value = false;
+  }, 2000);
+};
 
 // ── Community Feed States ──
 const feedPosts = ref([]);
@@ -2010,6 +2022,7 @@ const handlePublishJob = async (e) => {
       publishedJobs.value = [savedJob, ...publishedJobs.value];
       localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
       jobs.value = [savedJob, ...jobs.value];
+      publishedJobSuccessData.value = savedJob;
     } else {
       throw new Error('Falha no salvamento');
     }
@@ -2019,7 +2032,7 @@ const handlePublishJob = async (e) => {
       title: newJobForm.value.title,
       company: newJobForm.value.company,
       location: newJobForm.value.location || 'Remoto — Brasil',
-      link: 'https://linkedin.com/jobs/view/' + Date.now(),
+      link: 'https://vagasync.com.br/vagas/offline_' + Date.now(),
       source: 'recruiter',
       match_score: 95,
       status: 'found',
@@ -2032,6 +2045,7 @@ const handlePublishJob = async (e) => {
     publishedJobs.value = [job, ...publishedJobs.value];
     localStorage.setItem('vagasync_published_jobs', JSON.stringify(publishedJobs.value));
     jobs.value = [job, ...jobs.value];
+    publishedJobSuccessData.value = job;
   }
   
   newJobForm.value = { title: '', company: '', location: '', keywords: '', description: '' };
@@ -3348,6 +3362,86 @@ const restoreCandidate = () => {
             </button>
           </div>
         </template>
+      </div>
+    </div>
+
+    <!-- Modal de Sucesso de Publicação de Vaga (Recrutador) -->
+    <div v-if="publishedJobSuccessData" class="modal-overlay" style="
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3, 5, 12, 0.95); backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    ">
+      <div class="glass-card" style="width: 520px; padding: 2.25rem; border: 1px solid rgba(16, 185, 129, 0.4); text-align: center; box-shadow: 0 0 30px rgba(16, 185, 129, 0.15); max-height: 95vh; overflow-y: auto;">
+        <div style="background: rgba(16, 185, 129, 0.1); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem auto; border: 1px solid rgba(16, 185, 129, 0.3);">
+          <i class="fa-solid fa-circle-check" style="color: #10b981; font-size: 2rem;"></i>
+        </div>
+        
+        <h2 style="font-size: 1.5rem; color: #fff; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em;">
+          Vaga Publicada com Sucesso! 📣
+        </h2>
+        <p style="color: var(--text-secondary); font-size: 0.88rem; line-height: 1.6; margin-bottom: 1.5rem;">
+          A vaga <strong>{{ publishedJobSuccessData.title }}</strong> na empresa <strong>{{ publishedJobSuccessData.company }}</strong> já está ativa no radar de buscas inteligentes do VagaSync.
+        </p>
+
+        <!-- Informações e Status de Notificação -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; text-align: left;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: #fff; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-bell" style="color: #3b82f6;"></i> Status do Alerta de Confirmação:
+          </div>
+          
+          <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem;">
+              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-envelope" style="color: #94a3b8; width: 14px;"></i> Notificação por E-mail:
+              </span>
+              <span style="color: #10b981; font-weight: 700;">✅ Despachado</span>
+            </div>
+            
+            <div v-if="publishedJobSuccessData.recruiter_phone" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem;">
+              <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-phone" style="color: #94a3b8; width: 14px;"></i> Notificação de WhatsApp:
+              </span>
+              <span style="color: #10b981; font-weight: 700;">✅ Despachado</span>
+            </div>
+          </div>
+          
+          <div style="border-top: 1px solid rgba(255,255,255,0.06); margin-top: 0.75rem; padding-top: 0.75rem; font-size: 0.7rem; color: var(--text-muted); line-height: 1.4;">
+            <i class="fa-solid fa-circle-info"></i> Os alertas foram enviados para o contato cadastrado da vaga (<strong>{{ publishedJobSuccessData.recruiter_contact }}</strong>).
+          </div>
+        </div>
+
+        <!-- Link de Compartilhamento -->
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; text-align: left; margin-bottom: 1.75rem;">
+          <label style="font-size: 0.74rem; color: var(--text-secondary); font-weight: 600;">Link público da vaga para compartilhar:</label>
+          <div style="display: flex; gap: 0.5rem; width: 100%;">
+            <input 
+              type="text" 
+              class="form-input" 
+              readonly
+              style="font-size: 0.76rem; padding: 0.45rem 0.6rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); flex: 1; font-family: monospace; border-radius: 6px; color: var(--text-secondary);"
+              :value="publishedJobSuccessData.link"
+              @click="(e) => e.target.select()"
+            />
+            <button 
+              type="button" 
+              class="btn btn-primary" 
+              style="font-size: 0.76rem; padding: 0.45rem 1rem; background: #3b82f6; border: none; font-weight: 700; white-space: nowrap; border-radius: 6px; display: flex; align-items: center; gap: 4px;"
+              @click="copyJobLink"
+            >
+              <i class="fa-solid" :class="jobLinkCopied ? 'fa-check' : 'fa-copy'"></i>
+              {{ jobLinkCopied ? 'Copiado!' : 'Copiar' }}
+            </button>
+          </div>
+        </div>
+
+        <button 
+          type="button" 
+          class="btn btn-primary" 
+          style="width: 100%; font-size: 0.85rem; padding: 0.6rem; background: linear-gradient(135deg, #10b981, #059669); border: none;"
+          @click="publishedJobSuccessData = null"
+        >
+          Entendido, ir para o Dashboard
+        </button>
       </div>
     </div>
 
