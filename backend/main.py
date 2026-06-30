@@ -612,8 +612,8 @@ def get_jobs(db: Session = Depends(get_db)):
 
 
 @app.post("/api/jobs", response_model=JobResponse)
-def create_recruiter_job(payload: JobCreate, db: Session = Depends(get_db)):
-    """Cria uma vaga publicada por recrutador e a salva no banco."""
+async def create_recruiter_job(payload: JobCreate, db: Session = Depends(get_db)):
+    """Cria uma vaga publicada por recrutador e a salva no banco com despacho de notificação."""
     import hashlib
     from datetime import timedelta
     unique_id = hashlib.md5(f"{payload.title}{payload.company}{datetime.utcnow().isoformat()}".encode()).hexdigest()[:12]
@@ -640,6 +640,13 @@ def create_recruiter_job(payload: JobCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
     add_log("success", f"📣 Recrutador publicou nova vaga: {payload.title} em {payload.company}")
+    
+    # Envia notificação ao recrutador (E-mail, WhatsApp, etc.)
+    try:
+        await notifier.dispatch_notification("job_published", job, db)
+    except Exception as e:
+        add_log("warning", f"Erro ao enviar notificação de vaga publicada: {e}")
+        
     return job
 
 @app.post("/api/jobs/{job_id}/upload-image")
