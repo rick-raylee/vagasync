@@ -3498,9 +3498,9 @@ const restoreCandidate = () => {
         <div class="auth-right">
           <div class="glass-card auth-form-card">
             <!-- Logo do VagaSync no topo do Card -->
-            <div style="text-align: center; margin-bottom: 2rem; margin-top: 0.5rem;">
-              <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.5rem;" />
-              <div style="font-size: 1.6rem; font-weight: 800; color: #fff; background: linear-gradient(135deg, #00f2fe, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.02em;">
+            <div style="text-align: center; margin-bottom: 1.5rem; margin-top: 0.5rem;">
+              <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" style="width: 72px; height: 72px; object-fit: contain; margin-bottom: 0.4rem;" />
+              <div style="font-size: 1.6rem; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
                 Vaga Sync
               </div>
             </div>
