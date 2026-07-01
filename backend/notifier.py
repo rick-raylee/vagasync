@@ -41,20 +41,32 @@ def get_cfg(db: Session, key: str) -> str:
 
 def build_job_payload(event_type: str, job) -> dict:
     """Monta o payload JSON padrão enviado em todos os canais."""
+    if event_type == "test_generated":
+        return {
+            "event": event_type,
+            "timestamp": datetime.utcnow().isoformat(),
+            "assessment": {
+                "title": getattr(job, "title", ""),
+                "job_title": getattr(job, "job_title", ""),
+                "test_type": getattr(job, "test_type", ""),
+                "questions": getattr(job, "questions", []),
+                "link": getattr(job, "link", "")
+            }
+        }
     return {
         "event": event_type,
         "timestamp": datetime.utcnow().isoformat(),
         "job": {
-            "id": job.id,
-            "title": job.title,
-            "company": job.company,
-            "location": job.location,
-            "link": job.link,
-            "match_score": job.match_score,
-            "status": job.status,
-            "recruiter_name": job.recruiter_name,
-            "recruiter_contact": job.recruiter_contact,
-            "applied_at": job.applied_at.isoformat() if job.applied_at else None,
+            "id": getattr(job, "id", None),
+            "title": getattr(job, "title", ""),
+            "company": getattr(job, "company", ""),
+            "location": getattr(job, "location", ""),
+            "link": getattr(job, "link", ""),
+            "match_score": getattr(job, "match_score", 0),
+            "status": getattr(job, "status", ""),
+            "recruiter_name": getattr(job, "recruiter_name", ""),
+            "recruiter_contact": getattr(job, "recruiter_contact", ""),
+            "applied_at": job.applied_at.isoformat() if getattr(job, "applied_at", None) else None,
         }
     }
 
@@ -64,24 +76,28 @@ EVENT_LABELS = {
     "recruiter_contact": "📞 Recrutador Entrou em Contato!",
     "followup_sent":    "📨 Follow-up de RH Agendado",
     "candidate_applied": "👥 Novo Candidato Inscrito!",
-    "job_published":     "📣 Sua Vaga foi Publicada!"
+    "job_published":     "📣 Sua Vaga foi Publicada!",
+    "test_generated":    "🧠 Novo Teste de Avaliação Gerado!"
 }
 
 
 def format_message(event_type: str, job) -> str:
     """Texto humanizado da notificação."""
     label = EVENT_LABELS.get(event_type, event_type)
+    if event_type == "test_generated":
+        return f"🔔 *Vaga Sync* — {label}\n\n🧠 Teste: {getattr(job, 'title', '')}\n💼 Cargo: {getattr(job, 'job_title', '')}\n📋 Tipo: {getattr(job, 'test_type', '')}\n🔗 Link: {getattr(job, 'link', '')}"
+        
     lines = [
         f"🔔 *Vaga Sync* — {label}",
         f"",
-        f"🏢 Empresa: {job.company}",
-        f"💼 Vaga:    {job.title}",
-        f"📍 Local:   {job.location or 'Remoto'}",
-        f"🎯 Match:   {job.match_score or 0}%",
+        f"🏢 Empresa: {getattr(job, 'company', '')}",
+        f"💼 Vaga:    {getattr(job, 'title', '')}",
+        f"📍 Local:   {getattr(job, 'location', 'Remoto') or 'Remoto'}",
+        f"🎯 Match:   {getattr(job, 'match_score', 0) or 0}%",
     ]
-    if job.recruiter_name:
+    if getattr(job, 'recruiter_name', None):
         lines.append(f"👤 Recrutador: {job.recruiter_name}")
-    if job.link:
+    if getattr(job, 'link', None):
         lines.append(f"🔗 Link: {job.link}")
     return "\n".join(lines)
 

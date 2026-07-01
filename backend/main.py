@@ -2467,7 +2467,7 @@ def normalize_test_data(data):
     return normalized
 
 @app.post("/api/recruiter/ai/generate-test")
-def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(get_db)):
+async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(get_db)):
     try:
         client = ai_agent.get_gemini_client(db)
         prompt = f"""
@@ -2503,7 +2503,26 @@ def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(
         raw_text = response.text if response.text else ""
         clean_text = ai_agent._clean_json_from_text(raw_text)
         parsed_data = json.loads(clean_text)
-        return normalize_test_data(parsed_data)
+        normalized = normalize_test_data(parsed_data)
+        
+        # Dispatch notification to n8n / multi-channel notifier!
+        class MockAssessment:
+            def __init__(self, title, job_title, test_type, questions):
+                self.title = title
+                self.job_title = job_title
+                self.test_type = test_type
+                self.questions = questions
+                self.link = f"https://www.vagasync.com.br/assessments/test_{int(datetime.utcnow().timestamp())}"
+                
+        mock_obj = MockAssessment(
+            title=normalized.get("title", ""),
+            job_title=payload.job_title,
+            test_type=payload.test_type,
+            questions=normalized.get("questions", [])
+        )
+        await notifier.dispatch_notification("test_generated", mock_obj, db)
+        
+        return normalized
     except Exception as e:
         print(f"[AI Recruiter] Erro ao gerar teste (usando fallback): {e}")
         # Fallback estruturado de teste
