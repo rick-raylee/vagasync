@@ -1165,6 +1165,40 @@ const contactedJobs = computed(() => {
   return safeList.filter(j => j.status === 'contacted');
 });
 
+const recruiterNotifications = computed(() => {
+  const list = [];
+  
+  // 1. Published Job confirmations
+  const safePublishedJobs = Array.isArray(publishedJobs.value) ? publishedJobs.value : [];
+  safePublishedJobs.forEach(job => {
+    list.push({
+      id: `job_pub_${job.id}`,
+      type: 'job_published',
+      title: job.title,
+      company: job.company,
+      created_at: job.created_at || new Date().toISOString(),
+      message: `Sua vaga para "${job.title}" em "${job.company}" foi publicada com sucesso e está ativa.`
+    });
+  });
+
+  // 2. Candidate applications (novos)
+  const safeCandidates = Array.isArray(recruitedCandidates.value) ? recruitedCandidates.value : [];
+  safeCandidates.forEach(cand => {
+    if (cand.status === 'novos') {
+      list.push({
+        id: `cand_app_${cand.id}`,
+        type: 'candidate_apply',
+        title: cand.name,
+        company: cand.role || 'Candidato',
+        created_at: new Date().toISOString(),
+        message: `O candidato "${cand.name}" se inscreveu para triagem.`
+      });
+    }
+  });
+
+  return list;
+});
+
 const triggerNotificationChat = (jobId) => {
   activeJobIdFromNotification.value = jobId;
   activeTab.value = 'messenger';
@@ -3968,15 +4002,16 @@ const restoreCandidate = () => {
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
+                position: relative;
               "
               :style="{
-                borderColor: contactedJobs.length > 0 ? 'rgba(0, 242, 254, 0.4)' : undefined,
-                background: contactedJobs.length > 0 ? 'rgba(0, 242, 254, 0.05)' : undefined
+                borderColor: (userRole === 'recruiter' ? recruiterNotifications.length > 0 : contactedJobs.length > 0) ? 'rgba(0, 242, 254, 0.4)' : undefined,
+                background: (userRole === 'recruiter' ? recruiterNotifications.length > 0 : contactedJobs.length > 0) ? 'rgba(0, 242, 254, 0.05)' : undefined
               }"
-              title="Notificações de Retorno de RH"
+              title="Notificações VagaSync"
             >
               <Bell :size="16" />
-              <span v-if="contactedJobs.length > 0" style="
+              <span v-if="userRole === 'recruiter' ? recruiterNotifications.length > 0 : contactedJobs.length > 0" style="
                 position: absolute; top: -2px; right: -2px;
                 width: 15px; height: 15px; border-radius: 50%;
                 background: linear-gradient(135deg, #ef4444, #f59e0b);
@@ -3984,7 +4019,7 @@ const restoreCandidate = () => {
                 display: flex; align-items: center; justify-content: center;
                 box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
               ">
-                {{ contactedJobs.length }}
+                {{ userRole === 'recruiter' ? recruiterNotifications.length : contactedJobs.length }}
               </span>
             </button>
             
@@ -3993,96 +4028,144 @@ const restoreCandidate = () => {
                 style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 998;"
                 @click="showNotifications = false"
               />
-              <div class="glass-card" style="
-                position: absolute;
-                top: 120%;
-                right: 0;
-                width: 360px;
-                max-height: 400px;
-                overflow: hidden;
-                z-index: 999;
-                padding: 1rem;
-                display: flex;
-                flex-direction: column;
-                gap: 0.75rem;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-                border: 1px solid var(--border-color);
-                background: rgba(13, 20, 38, 0.98);
-                backdrop-filter: blur(12px);
-                border-radius: 10px;
-              ">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; padding-right: 0.25rem;">
-                  <span style="font-weight: 800; font-size: 0.85rem; color: #00f2fe; display: flex; align-items: center; gap: 4px;">
-                    <Bell :size="13" /> Retornos de RH ({{ contactedJobs.length }})
-                  </span>
-                  <button 
-                    style="background: transparent; border: none; color: var(--text-muted); font-size: 0.72rem; cursor: pointer; padding: 2px 6px;"
-                    @click="showNotifications = false"
-                  >
-                    Fechar
-                  </button>
-                </div>
+              <div class="glass-card" :style="{
+                position: 'absolute',
+                top: '120%',
+                right: userRole === 'candidate' ? '0' : 'auto',
+                left: userRole === 'candidate' ? 'auto' : '-10px',
+                width: '360px',
+                maxHeight: '400px',
+                overflow: 'hidden',
+                zIndex: 999,
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                border: '1px solid var(--border-color)',
+                background: 'rgba(13, 20, 38, 0.98)',
+                backdropFilter: 'blur(12px)',
+                borderRadius: '10px'
+              }">
                 
-                <div style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 4px;">
-                  <div v-if="contactedJobs.length === 0" style="text-align: center; padding: 1.5rem 0; color: var(--text-secondary); font-size: 0.8rem;">
-                    Nenhum retorno de RH no momento.
+                <!-- Recruiter Mode Notifications -->
+                <template v-if="userRole === 'recruiter'">
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; padding-right: 0.25rem;">
+                    <span style="font-weight: 800; font-size: 0.85rem; color: #00f2fe; display: flex; align-items: center; gap: 4px;">
+                      <Bell :size="13" /> Notificações da Vaga ({{ recruiterNotifications.length }})
+                    </span>
+                    <button 
+                      style="background: transparent; border: none; color: var(--text-muted); font-size: 0.72rem; cursor: pointer; padding: 2px 6px;"
+                      @click="showNotifications = false"
+                    >
+                      Fechar
+                    </button>
                   </div>
                   
-                  <div v-else style="display: flex; flex-direction: column; gap: 0.6rem;">
-                    <div v-for="job in contactedJobs" :key="job.id" style="
-                      padding: 0.75rem;
-                      background: rgba(255,255,255,0.02);
-                      border: 1px solid var(--border-color);
-                      border-radius: 8px;
-                      display: flex;
-                      flex-direction: column;
-                      gap: 0.3rem;
-                    ">
-                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <strong style="font-size: 0.8rem; color: #ffffff;">{{ job.company }}</strong>
-                        <span style="font-size: 0.68rem; color: var(--color-success); font-weight: 600;">RH Retornou</span>
-                      </div>
-                      <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ job.title }}</span>
-                      
-                      <div style="
-                        font-size: 0.7rem;
-                        color: var(--text-secondary);
-                        background: rgba(0,0,0,0.25);
-                        padding: 0.4rem 0.5rem;
-                        border-radius: 4px;
-                        margin-top: 2px;
+                  <div style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 4px;">
+                    <div v-if="recruiterNotifications.length === 0" style="text-align: center; padding: 1.5rem 0; color: var(--text-secondary); font-size: 0.8rem;">
+                      Nenhuma notificação de vaga no momento.
+                    </div>
+                    
+                    <div v-else style="display: flex; flex-direction: column; gap: 0.6rem;">
+                      <div v-for="notif in recruiterNotifications" :key="notif.id" style="
+                        padding: 0.75rem;
+                        background: rgba(255,255,255,0.02);
+                        border: 1px solid var(--border-color);
+                        border-radius: 8px;
                         display: flex;
                         flex-direction: column;
-                        gap: 3px;
+                        gap: 0.3rem;
                       ">
-                        <div v-if="job.recruiter_name">👤 <strong>Recrutador:</strong> {{ job.recruiter_name }}</div>
-                        <div v-if="job.recruiter_phone">📞 <strong>Telefone:</strong> {{ job.recruiter_phone }}</div>
-                        <div v-if="job.recruiter_contact">✉️ <strong>Email:</strong> {{ job.recruiter_contact }}</div>
-                        <div v-if="job.company_address">📍 <strong>Endereço:</strong> {{ job.company_address }}</div>
-                      </div>
-                      
-                      <div style="display: flex; gap: 0.4rem; margin-top: 0.3rem;">
-                        <button
-                          class="btn btn-primary"
-                          style="padding: 0.3rem 0.5rem; font-size: 0.7rem; flex: 1;"
-                          @click="triggerNotificationChat(job.id)"
-                        >
-                          Conversar no Chat
-                        </button>
-                        <a
-                          v-if="job.company_address"
-                          :href="`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.company_address)}`"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="btn btn-secondary"
-                          style="padding: 0.3rem 0.5rem; font-size: 0.7rem; text-decoration: none; display: flex; align-items: center; justify-content: center;"
-                        >
-                          Maps
-                        </a>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                          <strong style="font-size: 0.8rem; color: #ffffff; display: flex; align-items: center; gap: 4px;">
+                            <span v-if="notif.type === 'job_published'">📣</span>
+                            <span v-else>👤</span>
+                            {{ notif.type === 'job_published' ? 'Vaga Publicada' : 'Inscrição Recebida' }}
+                          </strong>
+                          <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600;">RH Informativo</span>
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">{{ notif.message }}</span>
                       </div>
                     </div>
                   </div>
-                </div>
+                </template>
+
+                <!-- Candidate Mode Notifications -->
+                <template v-else>
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; padding-right: 0.25rem;">
+                    <span style="font-weight: 800; font-size: 0.85rem; color: #00f2fe; display: flex; align-items: center; gap: 4px;">
+                      <Bell :size="13" /> Retornos de RH ({{ contactedJobs.length }})
+                    </span>
+                    <button 
+                      style="background: transparent; border: none; color: var(--text-muted); font-size: 0.72rem; cursor: pointer; padding: 2px 6px;"
+                      @click="showNotifications = false"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  
+                  <div style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 4px;">
+                    <div v-if="contactedJobs.length === 0" style="text-align: center; padding: 1.5rem 0; color: var(--text-secondary); font-size: 0.8rem;">
+                      Nenhum retorno de RH no momento.
+                    </div>
+                    
+                    <div v-else style="display: flex; flex-direction: column; gap: 0.6rem;">
+                      <div v-for="job in contactedJobs" :key="job.id" style="
+                        padding: 0.75rem;
+                        background: rgba(255,255,255,0.02);
+                        border: 1px solid var(--border-color);
+                        border-radius: 8px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 0.3rem;
+                      ">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                          <strong style="font-size: 0.8rem; color: #ffffff;">{{ job.company }}</strong>
+                          <span style="font-size: 0.68rem; color: var(--color-success); font-weight: 600;">RH Retornou</span>
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">{{ job.title }}</span>
+                        
+                        <div style="
+                          font-size: 0.7rem;
+                          color: var(--text-secondary);
+                          background: rgba(0,0,0,0.25);
+                          padding: 0.4rem 0.5rem;
+                          border-radius: 4px;
+                          margin-top: 2px;
+                          display: flex;
+                          flex-direction: column;
+                          gap: 3px;
+                        ">
+                          <div v-if="job.recruiter_name">👤 <strong>Recrutador:</strong> {{ job.recruiter_name }}</div>
+                          <div v-if="job.recruiter_phone">📞 <strong>Telefone:</strong> {{ job.recruiter_phone }}</div>
+                          <div v-if="job.recruiter_contact">✉️ <strong>Email:</strong> {{ job.recruiter_contact }}</div>
+                          <div v-if="job.company_address">📍 <strong>Endereço:</strong> {{ job.company_address }}</div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 0.4rem; margin-top: 0.3rem;">
+                          <button
+                            class="btn btn-primary"
+                            style="padding: 0.3rem 0.5rem; font-size: 0.7rem; flex: 1;"
+                            @click="triggerNotificationChat(job.id)"
+                          >
+                            Conversar no Chat
+                          </button>
+                          <a
+                            v-if="job.company_address"
+                            :href="`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.company_address)}`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="btn btn-secondary"
+                            style="padding: 0.3rem 0.5rem; font-size: 0.7rem; text-decoration: none; display: flex; align-items: center; justify-content: center;"
+                          >
+                            Maps
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
