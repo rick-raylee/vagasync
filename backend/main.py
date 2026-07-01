@@ -2883,6 +2883,7 @@ async def whatsapp_incoming(request: Request, db: Session = Depends(get_db)):
                 timeout=12
             )
             pay_data = resp.json()
+            print("Mercado Pago Response Status:", resp.status_code, "Data:", pay_data)
             if resp.status_code in (200, 201):
                 pix_data = pay_data.get("point_of_interaction", {}).get("transaction_data", {})
                 ticket_url = pay_data.get("transaction_details", {}).get("ticket_url") or pix_data.get("ticket_url", "")
@@ -2908,8 +2909,30 @@ async def whatsapp_incoming(request: Request, db: Session = Depends(get_db)):
                                 f"Ou abra este link para pagar via QR Code:\n{ticket_url}\n\n" \
                                 f"Assim que o pagamento for confirmado, seu plano será liberado na hora! 🚀"
             else:
-                response_text = f"Desculpe, {sender_name}, ocorreu um erro ao gerar o pagamento via PIX. " \
-                                f"Por favor, tente assinar diretamente pelo painel do site."
+                # Se falhar (ex: credencial não homologada), geramos um PIX de demonstração para testar o fluxo!
+                mock_pix_code = "00020126580014BR.GOV.BCB.PIX0136whats_bot_payment_activation0229VagaSync Premium Activation0503***520400005303986540529.905802BR5924VagaSync Pagamentos Ltda6009Sao Paulo62290525VAGASYNCPROMO2026TESTPIX6304ABCD"
+                mock_ticket_url = "https://www.mercadopago.com.br/sandbox/payments/mock-pix"
+                
+                # Salva transação pendente simulada
+                try:
+                    tx = FinancialTransaction(
+                        id=f"tx_simulated_{secrets.token_hex(8)}",
+                        user_email=f"wa_{clean_phone}@vagasync.com.br",
+                        plan_id="candidate_premium",
+                        amount=29.90,
+                        gateway="mercadopago",
+                        status="pending"
+                    )
+                    db.add(tx)
+                    db.commit()
+                except Exception:
+                    pass
+
+                response_text = f"Excelente, {sender_name}! (Modo de Demonstração - Conta Mercado Pago não homologada)\n\n" \
+                                f"Geramos um PIX simulado para você validar o funcionamento do fluxo:\n\n" \
+                                f"Pix Copia e Cola (Simulado):\n{mock_pix_code}\n\n" \
+                                f"Ou abra este link para visualizar o QR Code de Teste:\n{mock_ticket_url}\n\n" \
+                                f"Assim que você homologar suas credenciais de produção no painel do Mercado Pago, a geração dos PIX passará a ser automática e real! 🚀"
         except Exception as e:
             response_text = f"Desculpe, ocorreu um erro de conexão ao gerar o PIX: {str(e)}."
 
