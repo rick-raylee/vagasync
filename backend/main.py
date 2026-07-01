@@ -2339,6 +2339,7 @@ class GenerateJobRequest(BaseModel):
 class GenerateTestRequest(BaseModel):
     job_title: str
     test_type: str  # "tech" ou "behavioral"
+    num_questions: int = 5
 
 class GenerateOfferRequest(BaseModel):
     candidate_name: str
@@ -2474,7 +2475,7 @@ async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = De
         Crie um teste de avaliação para candidatos à vaga de '{payload.job_title}'.
         O tipo do teste deve ser: '{payload.test_type}' (tech = conhecimentos técnicos específicos/lógica; behavioral = cenários de fit cultural e inteligência emocional).
         
-        Gere exatamente 5 perguntas de múltipla escolha. Cada pergunta deve ter 4 alternativas (A, B, C, D) e indicar claramente qual é a resposta correta e a explicação.
+        Gere exatamente {payload.num_questions} perguntas de múltipla escolha. Cada pergunta deve ter 4 alternativas (A, B, C, D) e indicar claramente qual é a resposta correta e a explicação.
         
         Retorne APENAS um objeto JSON válido com o seguinte formato:
         {{
@@ -2758,6 +2759,60 @@ def get_recruiter_submissions(db: Session = Depends(get_db)):
             "created_at": s.created_at.isoformat()
         })
     return results
+
+
+class UpdateAssessmentRequest(BaseModel):
+    title: str
+    questions: list
+
+@app.put("/api/recruiter/assessments/{test_id}")
+def update_assessment(test_id: str, payload: UpdateAssessmentRequest, db: Session = Depends(get_db)):
+    assessment = db.query(Assessment).filter(Assessment.id == test_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Teste não encontrado")
+    assessment.title = payload.title
+    assessment.questions_json = json.dumps(payload.questions)
+    db.commit()
+    return {"success": True}
+
+@app.get("/api/recruiter/assessments")
+def get_recruiter_assessments(db: Session = Depends(get_db)):
+    tests = db.query(Assessment).order_by(Assessment.created_at.desc()).all()
+    results = []
+    for t in tests:
+        try:
+            qs = json.loads(t.questions_json)
+        except Exception:
+            qs = []
+        results.append({
+            "id": t.id,
+            "job_title": t.job_title,
+            "test_type": t.test_type,
+            "title": t.title,
+            "questions": qs,
+            "link": f"https://www.vagasync.com.br/?test={t.id}",
+            "created_at": t.created_at.isoformat()
+        })
+    return results
+
+@app.get("/api/candidate/submissions")
+def get_candidate_submissions(email: str, db: Session = Depends(get_db)):
+    subs = db.query(AssessmentSubmission).filter(AssessmentSubmission.candidate_email == email).order_by(AssessmentSubmission.created_at.desc()).all()
+    results = []
+    for s in subs:
+        asm = db.query(Assessment).filter(Assessment.id == s.assessment_id).first()
+        title = asm.title if asm else "Teste de Avaliação"
+        job_title = asm.job_title if asm else "Vaga"
+        results.append({
+            "id": s.id,
+            "assessment_id": s.assessment_id,
+            "test_title": title,
+            "job_title": job_title,
+            "score": s.score,
+            "created_at": s.created_at.isoformat()
+        })
+    return results
+
 
 
 
