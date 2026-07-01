@@ -130,6 +130,27 @@ class FeedReaction(Base):
     user_email = Column(String, index=True)
     reaction_type = Column(String) # 'like', 'clap', 'love', 'idea'
 
+class Assessment(Base):
+    __tablename__ = "assessments"
+
+    id = Column(String, primary_key=True, index=True)
+    job_title = Column(String, index=True)
+    test_type = Column(String) # tech, behavioral
+    title = Column(String)
+    questions_json = Column(Text) # JSON string of questions
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AssessmentSubmission(Base):
+    __tablename__ = "assessment_submissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assessment_id = Column(String, index=True)
+    candidate_name = Column(String)
+    candidate_email = Column(String)
+    answers_json = Column(Text) # Selected alternatives
+    score = Column(Integer) # correct answers
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     

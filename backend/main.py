@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 import database
-from database import get_db, Job, Config, Log, init_db, add_log
+from database import get_db, Job, Config, Log, init_db, add_log, Assessment, AssessmentSubmission
 import ai_agent
 import linkedin_bot
 import notifier
@@ -2505,20 +2505,37 @@ async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = De
         parsed_data = json.loads(clean_text)
         normalized = normalize_test_data(parsed_data)
         
+        # Save to DB
+        import uuid
+        test_id = f"test_{uuid.uuid4().hex[:8]}"
+        db_assessment = Assessment(
+            id=test_id,
+            job_title=payload.job_title,
+            test_type=payload.test_type,
+            title=normalized.get("title", ""),
+            questions_json=json.dumps(normalized.get("questions", []))
+        )
+        db.add(db_assessment)
+        db.commit()
+        
+        normalized["id"] = test_id
+        normalized["link"] = f"https://www.vagasync.com.br/?test={test_id}"
+        
         # Dispatch notification to n8n / multi-channel notifier!
         class MockAssessment:
-            def __init__(self, title, job_title, test_type, questions):
+            def __init__(self, title, job_title, test_type, questions, link):
                 self.title = title
                 self.job_title = job_title
                 self.test_type = test_type
                 self.questions = questions
-                self.link = f"https://www.vagasync.com.br/assessments/test_{int(datetime.utcnow().timestamp())}"
+                self.link = link
                 
         mock_obj = MockAssessment(
             title=normalized.get("title", ""),
             job_title=payload.job_title,
             test_type=payload.test_type,
-            questions=normalized.get("questions", [])
+            questions=normalized.get("questions", []),
+            link=normalized["link"]
         )
         await notifier.dispatch_notification("test_generated", mock_obj, db)
         
@@ -2526,8 +2543,9 @@ async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = De
     except Exception as e:
         print(f"[AI Recruiter] Erro ao gerar teste (usando fallback): {e}")
         # Fallback estruturado de teste
+        fallback_data = {}
         if payload.test_type == "tech":
-            return {
+            fallback_data = {
                 "title": f"Avaliação Técnica Geral para {payload.job_title}",
                 "questions": [
                     {
@@ -2557,7 +2575,7 @@ async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = De
                 ]
             }
         else:
-            return {
+            fallback_data = {
                 "title": f"Mapeamento Comportamental & Fit Cultural — {payload.job_title}",
                 "questions": [
                     {
@@ -2574,6 +2592,42 @@ async def generate_recruiter_test(payload: GenerateTestRequest, db: Session = De
                     }
                 ]
             }
+            
+        # Save fallback to DB
+        import uuid
+        test_id = f"test_{uuid.uuid4().hex[:8]}"
+        db_assessment = Assessment(
+            id=test_id,
+            job_title=payload.job_title,
+            test_type=payload.test_type,
+            title=fallback_data.get("title", ""),
+            questions_json=json.dumps(fallback_data.get("questions", []))
+        )
+        db.add(db_assessment)
+        db.commit()
+        
+        fallback_data["id"] = test_id
+        fallback_data["link"] = f"https://www.vagasync.com.br/?test={test_id}"
+        
+        # Dispatch notification
+        class MockAssessmentFallback:
+            def __init__(self, title, job_title, test_type, questions, link):
+                self.title = title
+                self.job_title = job_title
+                self.test_type = test_type
+                self.questions = questions
+                self.link = link
+                
+        mock_obj = MockAssessmentFallback(
+            title=fallback_data.get("title", ""),
+            job_title=payload.job_title,
+            test_type=payload.test_type,
+            questions=fallback_data.get("questions", []),
+            link=fallback_data["link"]
+        )
+        await notifier.dispatch_notification("test_generated", mock_obj, db)
+        
+        return fallback_data
 
 @app.post("/api/recruiter/ai/generate-offer")
 def generate_candidate_offer(payload: GenerateOfferRequest, db: Session = Depends(get_db)):
@@ -2614,5 +2668,96 @@ Seja muito bem-vindo(a) à {payload.company}!
 Atenciosamente,
 Recrutamento e Seleção — {payload.company}"""
         return {"offer_text": fallback_letter.strip()}
+
+
+class SubmitAssessmentRequest(BaseModel):
+    candidate_name: str
+    candidate_email: str
+    answers: dict
+
+@app.get("/api/assessments/{test_id}")
+def get_assessment(test_id: str, db: Session = Depends(get_db)):
+    assessment = db.query(Assessment).filter(Assessment.id == test_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Teste não encontrado")
+        
+    try:
+        questions = json.loads(assessment.questions_json)
+    except Exception:
+        questions = []
+        
+    safe_questions = []
+    for q in questions:
+        safe_questions.append({
+            "number": q.get("number"),
+            "question": q.get("question"),
+            "options": q.get("options")
+        })
+        
+    return {
+        "id": assessment.id,
+        "job_title": assessment.job_title,
+        "test_type": assessment.test_type,
+        "title": assessment.title,
+        "questions": safe_questions
+    }
+
+@app.post("/api/assessments/{test_id}/submit")
+def submit_assessment(test_id: str, payload: SubmitAssessmentRequest, db: Session = Depends(get_db)):
+    assessment = db.query(Assessment).filter(Assessment.id == test_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Teste não encontrado")
+        
+    try:
+        questions = json.loads(assessment.questions_json)
+    except Exception:
+        questions = []
+        
+    # Calculate score
+    score = 0
+    for q in questions:
+        q_num = str(q.get("number"))
+        correct = q.get("correct_answer")
+        selected = payload.answers.get(q_num)
+        if selected and str(selected).upper() == str(correct).upper():
+            score += 1
+            
+    # Save submission
+    db_sub = AssessmentSubmission(
+        assessment_id=test_id,
+        candidate_name=payload.candidate_name,
+        candidate_email=payload.candidate_email,
+        answers_json=json.dumps(payload.answers),
+        score=score
+    )
+    db.add(db_sub)
+    db.commit()
+    
+    return {
+        "success": True,
+        "score": score,
+        "total": len(questions)
+    }
+
+@app.get("/api/recruiter/assessments/submissions")
+def get_recruiter_submissions(db: Session = Depends(get_db)):
+    subs = db.query(AssessmentSubmission).order_by(AssessmentSubmission.created_at.desc()).all()
+    results = []
+    for s in subs:
+        asm = db.query(Assessment).filter(Assessment.id == s.assessment_id).first()
+        title = asm.title if asm else "Teste de Avaliação"
+        job_title = asm.job_title if asm else "Vaga"
+        results.append({
+            "id": s.id,
+            "assessment_id": s.assessment_id,
+            "test_title": title,
+            "job_title": job_title,
+            "candidate_name": s.candidate_name,
+            "candidate_email": s.candidate_email,
+            "score": s.score,
+            "created_at": s.created_at.isoformat()
+        })
+    return results
+
 
 

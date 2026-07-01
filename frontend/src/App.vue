@@ -503,6 +503,14 @@ const authMode = ref('login'); // 'login' or 'signup'
 const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
 const userRole = ref(localStorage.getItem('vagasync_role') || 'candidate');
 
+// Candidate Test States
+const activeCandidateTest = ref(null);
+const candidateTestAnswers = ref({});
+const candidateTestName = ref("");
+const candidateTestEmail = ref("");
+const isSubmittingCandidateTest = ref(false);
+const candidateTestResult = ref(null);
+
 // LinkedIn Connection States
 const linkedinTrigger = ref(0);
 const isLinkedinConnected = computed(() => {
@@ -818,6 +826,78 @@ const handleLogout = () => {
   showToast('Sessão Encerrada', 'Até breve!', 'info');
 };
 
+const loadCandidateTest = async (testId) => {
+  try {
+    const res = await fetch(`${API_BASE}/assessments/${testId}`);
+    if (res.ok) {
+      const data = await res.json();
+      activeCandidateTest.value = data;
+      candidateTestAnswers.value = {};
+      candidateTestName.value = "";
+      candidateTestEmail.value = "";
+      candidateTestResult.value = null;
+    } else {
+      showToast('Erro ao Carregar', 'Este teste não existe ou expirou.', 'error');
+    }
+  } catch (e) {
+    showToast('Erro de Conectividade', 'Não foi possível carregar o teste.', 'error');
+  }
+};
+
+const submitCandidateTestAnswers = async () => {
+  if (!candidateTestName.value || !candidateTestEmail.value) {
+    showToast('Campos Requeridos', 'Por favor, insira seu nome e e-mail para validar o teste.', 'warning');
+    return;
+  }
+  
+  const totalQuestions = activeCandidateTest.value.questions.length;
+  const answeredCount = Object.keys(candidateTestAnswers.value).length;
+  if (answeredCount < totalQuestions) {
+    showToast('Questões Pendentes', 'Por favor, responda todas as perguntas antes de enviar.', 'warning');
+    return;
+  }
+  
+  try {
+    isSubmittingCandidateTest.value = true;
+    const res = await fetch(`${API_BASE}/assessments/${activeCandidateTest.value.id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_name: candidateTestName.value,
+        candidate_email: candidateTestEmail.value,
+        answers: candidateTestAnswers.value
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      candidateTestResult.value = data;
+      showToast('Teste Enviado! 🧠', 'Suas respostas foram submetidas com sucesso.', 'success');
+      
+      const newCand = {
+        id: `cand_sub_${Date.now()}`,
+        name: candidateTestName.value,
+        email: candidateTestEmail.value,
+        role: activeCandidateTest.value.job_title,
+        status: 'novos',
+        match_score: Math.round((data.score / data.total) * 100),
+        match_explanation: `Respondeu ao teste "${activeCandidateTest.value.title}". Acertos: ${data.score}/${data.total}.`
+      };
+      
+      const currentList = JSON.parse(localStorage.getItem('vagasync_recruited_candidates') || '[]');
+      currentList.unshift(newCand);
+      localStorage.setItem('vagasync_recruited_candidates', JSON.stringify(currentList));
+      recruitedCandidates.value = currentList;
+      
+    } else {
+      throw new Error();
+    }
+  } catch (e) {
+    showToast('Falha no Envio', 'Não foi possível submeter suas respostas.', 'error');
+  } finally {
+    isSubmittingCandidateTest.value = false;
+  }
+};
+
 // SSE real-time logs
 let eventSource = null;
 let pollInterval = null;
@@ -830,10 +910,16 @@ onMounted(() => {
     document.documentElement.classList.remove('light-mode');
   }
 
+  // Handle URL candidate test checking
+  const urlParams = new URLSearchParams(window.location.search);
+  const testId = urlParams.get('test');
+  if (testId) {
+    loadCandidateTest(testId);
+  }
+
   fetchTransactionHistory();
 
   // Handle URL payment callbacks from Mercado Pago
-  const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment') || urlParams.get('status');
   if (paymentStatus === 'success' || paymentStatus === 'approved') {
     const planPaid = urlParams.get('plan_id') || 'candidate_premium';
@@ -3547,8 +3633,123 @@ const restoreCandidate = () => {
       </div>
     </div>
 
+    <!-- Candidate Test Screen (when visiting a test link) -->
+    <template v-if="activeCandidateTest">
+      <div class="test-page-container glass-card" style="max-width: 800px; margin: 4rem auto; padding: 2.5rem; border-radius: 16px; background: rgba(10, 15, 28, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);">
+        
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 2.5rem; position: relative;">
+          <div style="width: 70px; height: 70px; margin: 0 auto 1rem auto; display: flex; align-items: center; justify-content: center; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 50%;">
+            <i class="fa-solid fa-graduation-cap" style="font-size: 2rem; color: #00f2fe;"></i>
+          </div>
+          <h2 style="font-size: 1.8rem; font-weight: 700; color: #fff; margin: 0 0 0.5rem 0;">{{ activeCandidateTest.title }}</h2>
+          <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary);">
+            <i class="fa-solid fa-briefcase" style="color: #3b82f6;"></i>
+            <span>Vaga: <strong>{{ activeCandidateTest.job_title }}</strong></span>
+            <span style="opacity: 0.3;">|</span>
+            <i class="fa-solid fa-circle-nodes" style="color: #00f2fe;"></i>
+            <span>Tipo: <strong>{{ activeCandidateTest.test_type === 'tech' ? 'Técnico / Lógica' : 'Fit Cultural / Comportamental' }}</strong></span>
+          </div>
+          
+          <!-- Back button if recruiter wants to quit preview -->
+          <button @click="activeCandidateTest = null" class="btn-close-test" style="position: absolute; top: 0; right: 0; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;" title="Sair do Teste">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Success State (After Submission) -->
+        <div v-if="candidateTestResult" style="text-align: center; padding: 2rem 0;">
+          <div style="width: 90px; height: 90px; margin: 0 auto 1.5rem auto; display: flex; align-items: center; justify-content: center; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50%;">
+            <i class="fa-solid fa-check" style="font-size: 3rem; color: #10b981;"></i>
+          </div>
+          <h3 style="font-size: 1.5rem; color: #fff; margin-bottom: 0.75rem;">Avaliação Concluída!</h3>
+          <p style="color: var(--text-secondary); font-size: 1rem; line-height: 1.6; max-width: 500px; margin: 0 auto 2rem auto;">
+            Obrigado por participar! Suas respostas foram salvas e enviadas com segurança ao recrutador responsável. Seu perfil foi anexado à vaga correspondente.
+          </p>
+          
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; max-width: 400px; margin: 0 auto 2rem auto; display: flex; align-items: center; justify-content: space-around;">
+            <div>
+              <div style="font-size: 0.85rem; color: var(--text-secondary);">Respostas Corretas</div>
+              <div style="font-size: 2rem; font-weight: 700; color: #00f2fe; margin-top: 0.25rem;">{{ candidateTestResult.score }} / {{ candidateTestResult.total }}</div>
+            </div>
+            <div style="width: 1px; height: 50px; background: rgba(255,255,255,0.08);"></div>
+            <div>
+              <div style="font-size: 0.85rem; color: var(--text-secondary);">Aproveitamento</div>
+              <div style="font-size: 2rem; font-weight: 700; color: #10b981; margin-top: 0.25rem;">{{ Math.round((candidateTestResult.score / candidateTestResult.total) * 100) }}%</div>
+            </div>
+          </div>
+          
+          <button @click="activeCandidateTest = null" class="btn btn-primary" style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; padding: 0.75rem 2rem;">
+            Voltar ao VagaSync
+          </button>
+        </div>
+
+        <!-- Form and Test Questions -->
+        <div v-else>
+          <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; margin-bottom: 2rem; text-align: center;">
+            Preencha seus dados de identificação abaixo e responda com atenção às questões formuladas pela nossa inteligência artificial para o cargo.
+          </p>
+          
+          <!-- Candidate Credentials -->
+          <div class="test-user-info" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2.5rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px;">
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 0.85rem; color: #fff; margin-bottom: 0.4rem; display: block;">Seu Nome Completo *</label>
+              <input type="text" required class="form-input" v-model="candidateTestName" placeholder="Ex: João Silva" style="background: rgba(0,0,0,0.2);" />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 0.85rem; color: #fff; margin-bottom: 0.4rem; display: block;">Seu E-mail de Contato *</label>
+              <input type="email" required class="form-input" v-model="candidateTestEmail" placeholder="Ex: joao@email.com" style="background: rgba(0,0,0,0.2);" />
+            </div>
+          </div>
+
+          <!-- Questions list -->
+          <div style="display: flex; flex-direction: column; gap: 2rem; margin-bottom: 2.5rem;">
+            <div v-for="(q, idx) in activeCandidateTest.questions" :key="q.number" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 12px; transition: border-color 0.3s;" :style="candidateTestAnswers[q.number] ? 'border-color: rgba(0, 242, 254, 0.2); background: rgba(0, 242, 254, 0.01);' : ''">
+              
+              <!-- Question Header -->
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem;">
+                <span style="display: flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 50%; font-size: 0.85rem; font-weight: 700; color: #00f2fe; margin-top: 2px;">
+                  {{ idx + 1 }}
+                </span>
+                <h4 style="font-size: 1.05rem; font-weight: 600; color: #fff; line-height: 1.5; margin: 0;">{{ q.question }}</h4>
+              </div>
+
+              <!-- Options -->
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; padding-left: 2.25rem;">
+                <label v-for="(optText, optKey) in q.options" :key="optKey" class="test-option-label" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1.25rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; transition: all 0.25s;" :style="candidateTestAnswers[q.number] === optKey ? 'border-color: #00f2fe; background: rgba(0, 242, 254, 0.08); color: #fff;' : ''">
+                  <input type="radio" :name="'q_' + q.number" :value="optKey" v-model="candidateTestAnswers[q.number]" style="accent-color: #00f2fe; width: 18px; height: 18px; cursor: pointer;" />
+                  <span style="font-weight: 600; color: #00f2fe; font-size: 0.95rem;">{{ optKey }})</span>
+                  <span style="font-size: 0.92rem; line-height: 1.4;">{{ optText }}</span>
+                </label>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Submit Bar -->
+          <div style="text-align: center; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 2rem;">
+            <button 
+              @click="submitCandidateTestAnswers" 
+              class="btn btn-primary" 
+              style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; padding: 0.85rem 3rem; font-size: 1rem; border-radius: 30px; letter-spacing: 0.5px; transition: transform 0.2s;"
+              :disabled="isSubmittingCandidateTest"
+            >
+              <span v-if="isSubmittingCandidateTest">
+                <i class="fa-solid fa-spinner fa-spin" style="margin-right: 0.5rem;"></i>Submetendo Respostas...
+              </span>
+              <span v-else>
+                Finalizar e Enviar Avaliação
+              </span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </template>
+
     <!-- Login/Signup Screen -->
-    <template v-if="!isLoggedIn">
+    <template v-else-if="!isLoggedIn">
       <div class="auth-grid">
         <!-- Left panel: Presentation -->
         <div class="auth-left glass-card">
