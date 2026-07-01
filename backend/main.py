@@ -2392,6 +2392,80 @@ A {payload.company} é uma organização inovadora em constante crescimento, foc
 - Horário Flexível e ambiente de trabalho colaborativo."""
         return {"description": fallback_markdown.strip()}
 
+def normalize_test_data(data):
+    if not isinstance(data, dict):
+        return data
+        
+    normalized = {}
+    
+    # 1. Normalize Title
+    if "title" in data:
+        normalized["title"] = data["title"]
+    elif "titulo" in data:
+        normalized["title"] = data["titulo"]
+    elif "test_title" in data:
+        normalized["title"] = data["test_title"]
+    else:
+        normalized["title"] = "Avaliação de Candidato"
+        
+    # 2. Normalize Questions
+    questions_list = []
+    raw_questions = None
+    if "questions" in data:
+        raw_questions = data["questions"]
+    elif "perguntas" in data:
+        raw_questions = data["perguntas"]
+    elif "questoes" in data:
+        raw_questions = data["questoes"]
+        
+    if isinstance(raw_questions, list):
+        for i, q in enumerate(raw_questions):
+            if not isinstance(q, dict):
+                continue
+            q_norm = {}
+            
+            # Number
+            if "number" in q:
+                q_norm["number"] = q["number"]
+            elif "numero" in q:
+                q_norm["number"] = q["numero"]
+            else:
+                q_norm["number"] = i + 1
+                
+            # Question
+            if "question" in q:
+                q_norm["question"] = q["question"]
+            elif "pergunta" in q:
+                q_norm["question"] = q["pergunta"]
+            elif "enunciado" in q:
+                q_norm["question"] = q["enunciado"]
+            else:
+                q_norm["question"] = "Pergunta de múltipla escolha"
+                
+            # Options
+            options = {}
+            raw_options = q.get("options") or q.get("opcoes") or q.get("alternativas")
+            if isinstance(raw_options, dict):
+                for k, val in raw_options.items():
+                    options[str(k).upper()] = val
+            q_norm["options"] = options
+            
+            # Correct Answer
+            correct = q.get("correct_answer") or q.get("resposta_correta") or q.get("resposta") or q.get("correta") or q.get("correct")
+            if correct:
+                q_norm["correct_answer"] = str(correct).upper()
+            else:
+                q_norm["correct_answer"] = "A"
+                
+            # Explanation
+            explanation = q.get("explanation") or q.get("explicacao") or q.get("justificativa")
+            q_norm["explanation"] = explanation or "Alternativa correta com base nas melhores práticas do mercado."
+            
+            questions_list.append(q_norm)
+            
+    normalized["questions"] = questions_list
+    return normalized
+
 @app.post("/api/recruiter/ai/generate-test")
 def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(get_db)):
     try:
@@ -2428,7 +2502,8 @@ def generate_recruiter_test(payload: GenerateTestRequest, db: Session = Depends(
         )
         raw_text = response.text if response.text else ""
         clean_text = ai_agent._clean_json_from_text(raw_text)
-        return json.loads(clean_text)
+        parsed_data = json.loads(clean_text)
+        return normalize_test_data(parsed_data)
     except Exception as e:
         print(f"[AI Recruiter] Erro ao gerar teste (usando fallback): {e}")
         # Fallback estruturado de teste
