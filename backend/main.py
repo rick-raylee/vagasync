@@ -2814,5 +2814,117 @@ def get_candidate_submissions(email: str, db: Session = Depends(get_db)):
     return results
 
 
+@app.post("/api/whatsapp/incoming")
+async def whatsapp_incoming(request: Request, db: Session = Depends(get_db)):
+    """
+    Webhook para receber mensagens recebidas no WhatsApp,
+    processar com o Agente de IA e opcionalmente criar PIX de pagamento.
+    """
+    try:
+        body = await request.json()
+        print("Incoming WhatsApp Payload:", body)
+    except Exception:
+        return {"status": "error", "message": "Invalid JSON payload"}
+
+    message_text = ""
+    phone = ""
+    sender_name = "Cliente"
+
+    # Suporta múltiplos formatos (Evolution API, Z-API, CallMeBot, etc.)
+    if "data" in body and isinstance(body["data"], dict):
+        # Evolution API format
+        data = body["data"]
+        message_text = data.get("message", {}).get("conversation", "") or data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
+        phone = data.get("key", {}).get("remoteJid", "")
+        sender_name = body.get("pushName", "Cliente")
+    elif "message" in body:
+        # Z-API format
+        message_text = body.get("message", {}).get("text", {}).get("message", "") or body.get("text", "")
+        phone = body.get("phone", "")
+        sender_name = body.get("senderName", "Cliente")
+    else:
+        # Fallback genérico
+        message_text = body.get("text") or body.get("message") or ""
+        phone = body.get("phone") or body.get("from") or ""
+        sender_name = body.get("senderName") or body.get("name") or "Cliente"
+
+    if not message_text or not phone:
+        return {"status": "ignored", "reason": "No text message or phone number found"}
+
+    # Limpa o telefone
+    clean_phone = "".join(filter(str.isdigit, str(phone)))
+    if len(clean_phone) < 8:
+        return {"status": "ignored", "reason": "Invalid phone number"}
+
+    # Chama o Agente de IA para responder e analisar a intenção
+    response_text, intent = ai_agent.answer_whatsapp_chat(clean_phone, message_text, sender_name, db)
+
+    if intent == "generate_payment":
+        try:
+            access_token = get_config_value(db, "mercadopago_access_token", MP_ACCESS_TOKEN)
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "X-Idempotency-Key": secrets.token_hex(16),
+            }
+            pay_body = {
+                "transaction_amount": 29.90,
+                "description": "Plano Premium VagaSync — Ativação por WhatsApp",
+                "payment_method_id": "pix",
+                "payer": {
+                    "email": f"wa_{clean_phone}@vagasync.com.br",
+                    "first_name": sender_name.split()[0] if sender_name else "Cliente",
+                }
+            }
+            resp = requests.post(
+                "https://api.mercadopago.com/v1/payments",
+                headers=headers,
+                json=pay_body,
+                timeout=12
+            )
+            pay_data = resp.json()
+            if resp.status_code in (200, 201):
+                pix_data = pay_data.get("point_of_interaction", {}).get("transaction_data", {})
+                ticket_url = pay_data.get("transaction_details", {}).get("ticket_url") or pix_data.get("ticket_url", "")
+                qr_code = pix_data.get("qr_code", "")
+                
+                # Salva transação pendente
+                try:
+                    tx = FinancialTransaction(
+                        id=f"tx_{pay_data.get('id')}",
+                        user_email=f"wa_{clean_phone}@vagasync.com.br",
+                        plan_id="candidate_premium",
+                        amount=29.90,
+                        gateway="mercadopago",
+                        status="pending"
+                    )
+                    db.add(tx)
+                    db.commit()
+                except Exception:
+                    pass
+
+                response_text = f"Excelente, {sender_name}! Gerando o PIX para ativação do Plano Premium (R$ 29,90).\n\n" \
+                                f"Pix Copia e Cola:\n{qr_code}\n\n" \
+                                f"Ou abra este link para pagar via QR Code:\n{ticket_url}\n\n" \
+                                f"Assim que o pagamento for confirmado, seu plano será liberado na hora! 🚀"
+            else:
+                response_text = f"Desculpe, {sender_name}, ocorreu um erro ao gerar o pagamento via PIX. " \
+                                f"Por favor, tente assinar diretamente pelo painel do site."
+        except Exception as e:
+            response_text = f"Desculpe, ocorreu um erro de conexão ao gerar o PIX: {str(e)}."
+
+    # Envia a resposta de volta ao WhatsApp usando o CallMeBot
+    wa_apikey = notifier.get_cfg(db, "whatsapp_webhook")
+    if wa_apikey:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, notifier._send_whatsapp, clean_phone, wa_apikey, response_text)
+        return {"status": "success", "sent": True, "intent": intent}
+    else:
+        add_log("success", f"📱 [WhatsApp Chatbot Simulado] Enviando para {clean_phone}: \"{response_text[:100]}...\"")
+        return {"status": "simulated", "sent": False, "intent": intent, "reply": response_text}
+
+
+
 
 

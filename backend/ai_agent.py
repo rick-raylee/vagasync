@@ -11,7 +11,7 @@ from database import Config
 # ─────────────────────────────────────────────
 
 def get_api_key(db: Session = None) -> str:
-    """Obtém a chave da API Gemini da variável de ambiente ou do banco de dados."""
+    """Obtém a chave da API Gemini da variável de ambiente ou do banco de dados (suporta encriptação)."""
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
         return api_key
@@ -19,6 +19,12 @@ def get_api_key(db: Session = None) -> str:
         config = db.query(Config).filter(Config.key == "gemini_api_key").first()
         if config and config.value and config.value != "••••••••••••••••":
             return config.value
+        enc_config = db.query(Config).filter(Config.key == "enc_gemini_api_key").first()
+        if enc_config and enc_config.value:
+            import security
+            decrypted = security.decrypt_data(enc_config.value)
+            if decrypted and decrypted != "••••••••••••••••":
+                return decrypted
     return ""
 
 def get_gemini_client(db: Session = None):
@@ -388,3 +394,100 @@ Retorne SOMENTE um array JSON válido com até 8 vagas do LinkedIn:
         print(f"[Gemini LinkedIn] Erro: {e}")
 
     return all_jobs
+
+def generate_ai_comment(post_content: str, db: Session = None) -> str:
+    """Gera um comentário inteligente e profissional de IA para um post de rede social."""
+    try:
+        client = get_gemini_client(db)
+        prompt = f"""
+        Você é o "VagaSync IA Agente", um robô recrutador e consultor de carreira inteligente da plataforma VagaSync.
+        Escreva um comentário profissional, curto (máximo de 2 a 3 frases) e empático para a seguinte postagem na comunidade de carreiras:
+        
+        Postagem do usuário:
+        "{post_content}"
+        
+        Escreva o comentário de forma agregadora, trazendo incentivo ou dicas curtas relacionadas ao que foi postado. Não utilize hashtags e seja direto.
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return response.text.strip() if response.text else "Interessante! O mercado de trabalho está mudando rapidamente e estar preparado com inteligência artificial é a chave para o sucesso profissional. Continue focado!"
+    except Exception as e:
+        print(f"[IA Feed Comment] Falha ao chamar Gemini (usando fallback): {e}")
+        content_lower = post_content.lower()
+        if "entrevista" in content_lower or "seletivo" in content_lower:
+            return "Dica do VagaSync Agente: Em processos seletivos, treine suas respostas com foco em resultados mensuráveis (método STAR). Boa sorte!"
+        elif "curriculo" in content_lower or "currículo" in content_lower:
+            return "Lembre-se: Otimizar seu currículo com palavras-chave da vaga aumenta em mais de 70% o match de recrutamento. Vale a pena revisar!"
+        elif "linkedin" in content_lower:
+            return "Manter o LinkedIn atualizado e com o selo 'Open to Work' (ou apenas configurado para recrutadores) ajuda muito na busca passiva por vagas."
+        elif "estagio" in content_lower or "estágio" in content_lower or "junior" in content_lower or "júnior" in content_lower:
+            return "Para vagas iniciais, foque em demonstrar sua capacidade de aprendizado rápido e crie projetos de portfólio práticos!"
+        else:
+            return "Excelente reflexão! O networking e a constante atualização profissional são as ferramentas mais poderosas no mercado corporativo atual."
+
+def generate_ai_post(db: Session = None) -> str:
+    """Gera um post de blog ou postagem de feed relevante para carreira via IA."""
+    try:
+        client = get_gemini_client(db)
+        prompt = f"""
+        Você é o "VagaSync IA Agente", um especialista em recrutamento digital e tecnologia.
+        Gere um post interessante e curto (1 parágrafo com até 4 frases) para nossa comunidade profissional sobre tendências de mercado, uso de IA na carreira ou preparação para processos seletivos.
+        Diga algo inspirador ou traga um dado técnico interessante do setor de tecnologia. Seja direto e profissional.
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return response.text.strip() if response.text else "A inteligência artificial não vai substituir os profissionais, mas os profissionais que usam IA vão substituir aqueles que não usam. Como você tem otimizado sua rotina hoje?"
+    except Exception as e:
+        print(f"[IA Feed Post] Falha ao chamar Gemini (usando fallback): {e}")
+        import random
+        posts = [
+            "Você sabia que o mercado de TI deve abrir mais de 500 mil novas oportunidades na América Latina até o próximo ano? Investir em habilidades de cloud computing e engenharia de software continua sendo uma aposta extremamente segura.",
+            "Dica de Carreira: A melhor forma de se destacar para recrutadores é ter um portfólio no GitHub organizado, com READMEs claros explicando o propósito e as tecnologias de cada projeto. Menos quantidade, mais qualidade!",
+            "Reflexão do dia: A automação de candidaturas ajuda a expandir o alcance da sua busca, mas a preparação para a entrevista técnica continua sendo o fator decisivo para a contratação. Equilibre quantidade com preparação!",
+            "Agente VagaSync: Acabei de processar mais de 200 novas vagas nas últimas horas. Percebi um aumento de 15% na busca por desenvolvedores com noções de Docker e CI/CD. Vale a pena conferir se essas habilidades constam no seu perfil!"
+        ]
+        return random.choice(posts)
+
+
+def answer_whatsapp_chat(phone: str, message: str, sender_name: str, db: Session = None) -> tuple[str, str]:
+    """
+    Usa o Gemini para responder o chat do WhatsApp e detectar a intenção do usuário.
+    Retorna uma tupla (resposta_texto, intencao).
+    Intenções válidas: 'generate_payment', 'help', 'none'.
+    """
+    try:
+        client = get_gemini_client(db)
+        prompt = f"""
+        Você é o atendente virtual inteligente do VagaSync via WhatsApp.
+        Seu tom de voz deve ser prestativo, moderno e corporativo.
+        O nome do usuário com quem você está falando é '{sender_name}' e o telefone é '{phone}'.
+        
+        Mensagem recebida do usuário:
+        "{message}"
+        
+        Determine se a intenção do usuário é comprar, pagar, assinar o plano premium ou obter dados para pagamento/PIX.
+        
+        Responda APENAS com um objeto JSON contendo exatamente os seguintes campos:
+        - "response_text": a resposta que você quer enviar de volta no WhatsApp para o usuário. Se for detectada intenção de pagamento, responda dizendo de forma amigável que está gerando o PIX.
+        - "intent": a intenção detectada. Deve ser EXATAMENTE 'generate_payment' (se ele quer pagar/assinar/comprar o premium/pix) ou 'none' (para qualquer outro assunto de chat).
+        """
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        data = json.loads(response.text)
+        return data.get("response_text", "Olá! Como posso ajudar você hoje?"), data.get("intent", "none")
+    except Exception as e:
+        print(f"Erro no chatbot de WhatsApp IA: {e}")
+        msg_lower = message.lower()
+        if "pix" in msg_lower or "pagar" in msg_lower or "premium" in msg_lower or "comprar" in msg_lower:
+            return "Olá! Vou gerar o PIX para a assinatura Premium do VagaSync agora mesmo...", "generate_payment"
+        return "Olá! Sou o atendente virtual do VagaSync. Como posso te ajudar hoje?", "none"
+
