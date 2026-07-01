@@ -217,17 +217,38 @@ def _send_generic_webhook(url: str, text: str, payload: dict) -> bool:
 # ─────────────────────────────────────────────
 
 def _send_whatsapp(phone: str, apikey: str, text: str) -> bool:
-    """Envia notificação via WhatsApp usando a API gratuita do CallMeBot."""
+    """
+    Envia notificação via WhatsApp.
+    Suporta:
+    1. CallMeBot (se apikey for apenas o token numérico).
+    2. Evolution API (se apikey contiver a URL base ou começar com http).
+    """
     try:
         import urllib.parse
-        encoded_text = urllib.parse.quote(text)
-        # Remove caracteres indesejados do telefone (ex: + ou espaços)
         clean_phone = "".join(filter(str.isdigit, phone))
-        if clean_phone and not clean_phone.startswith("+"):
-            clean_phone = "+" + clean_phone
-        url = f"https://api.callmebot.com/whatsapp.php?phone={clean_phone}&text={encoded_text}&apikey={apikey}"
-        r = requests.get(url, timeout=10)
-        return r.status_code == 200
+        
+        # Se o apikey começar com http, tratamos como Evolution API URL
+        if apikey and (apikey.startswith("http://") or apikey.startswith("https://")):
+            headers = {
+                "apikey": "VagaSyncSecret2026#",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "number": clean_phone,
+                "text": text
+            }
+            url = apikey
+            if "/message/sendText/" not in url:
+                url = url.rstrip("/") + "/message/sendText/meu_bot"
+            r = requests.post(url, headers=headers, json=body, timeout=10)
+            return r.status_code in (200, 201)
+        else:
+            encoded_text = urllib.parse.quote(text)
+            if clean_phone and not clean_phone.startswith("+"):
+                clean_phone = "+" + clean_phone
+            url = f"https://api.callmebot.com/whatsapp.php?phone={clean_phone}&text={encoded_text}&apikey={apikey}"
+            r = requests.get(url, timeout=10)
+            return r.status_code == 200
     except Exception:
         return False
 
