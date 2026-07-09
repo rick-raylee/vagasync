@@ -47,3 +47,7 @@ Thumbs.db
 temp_search.txt
 recovered_App.vue
 temp_*.txt
+
+# Python cache files
+__pycache__/
+*.pyc

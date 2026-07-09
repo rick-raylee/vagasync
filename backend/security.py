@@ -107,3 +107,16 @@ def decrypt_data(encrypted_base64: str) -> str:
         return decrypted.decode('utf-8')
     except Exception:
         return ""
+
+# --- PASSWORD HASHING (BCRYPT) FOR MULTI-USER PHASE ---
+def hash_password(password: str) -> str:
+    import bcrypt
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    import bcrypt
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False

@@ -1,0 +1,943 @@
+Run started:2026-07-06 14:10:03.324351+00:00
+
+Test results:
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/ai_agent.py:462:15
+461	        ]
+462	        return random.choice(posts)
+463	
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/facebook_ads.py:92:41
+91	    # Since this is a self-contained automation system, we simulate success
+92	    mock_token = f"fb_access_token_real_{random.randint(1000, 9999)}"
+93	    token_config = db.query(Config).filter(Config.key == "enc_facebook_ads_access_token").first()
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/facebook_ads.py:236:24
+235	    
+236	    new_id = f"fb_camp_{random.randint(1000, 9999)}"
+237	    new_camp = {
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/facebook_ads.py:315:19
+314	        dt = base_date - datetime.timedelta(days=i)
+315	        day_seed = random.randint(150, 480)
+316	        history.append({
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'https://oauth2.googleapis.com/token'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/google_ads.py:100:16
+99	    
+100	    token_url = "https://oauth2.googleapis.com/token"
+101	    data = urllib.parse.urlencode({
+
+--------------------------------------------------
+>> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
+   Severity: Medium   Confidence: High
+   CWE: CWE-22 (https://cwe.mitre.org/data/definitions/22.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen
+   Location: backend/google_ads.py:111:13
+110	        req = urllib.request.Request(token_url, data=data)
+111	        with urllib.request.urlopen(req) as response:
+112	            res_data = json.loads(response.read().decode("utf-8"))
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'mock_refresh_token_xyz'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/google_ads.py:139:31
+138	    is_connected = bool(refresh_token)
+139	    is_demo = refresh_token == "mock_refresh_token_xyz"
+140	    
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/google_ads.py:270:17
+269	
+270	    new_id = str(random.randint(1003, 9999))
+271	    new_campaign = {
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/google_ads.py:359:21
+358	        # Add random variations
+359	        clicks_day = random.randint(150, 320) if total_clicks > 0 else 0
+360	        imp_day = clicks_day * random.randint(12, 16)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/google_ads.py:360:31
+359	        clicks_day = random.randint(150, 320) if total_clicks > 0 else 0
+360	        imp_day = clicks_day * random.randint(12, 16)
+361	        cost_day = clicks_day * random.uniform(0.60, 0.85)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/google_ads.py:361:32
+360	        imp_day = clicks_day * random.randint(12, 16)
+361	        cost_day = clicks_day * random.uniform(0.60, 0.85)
+362	        
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/google_ads.py:368:44
+367	            "cost": round(cost_day, 2),
+368	            "conversions": int(clicks_day * random.uniform(0.08, 0.12))
+369	        })
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/linkedin_bot.py:34:8
+33	            print(f"[{level.upper()}] {message.encode('ascii', 'replace').decode('ascii')}")
+34	        except Exception:
+35	            pass
+36	    add_log(level, message)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:181:32
+180	        # Dados do recrutador simulados (serão substituídos pelo real quando o bot os encontrar)
+181	        job.recruiter_name    = random.choice([
+182	            "Ana Silva", "Carlos Souza", "Juliana Costa",
+183	            "Marcos Oliveira", "Fernanda Santos", "Rodrigo Lima"
+184	        ])
+185	        job.recruiter_contact = f"recrutamento@{company.lower().replace(' ', '').replace('.', '')[:20]}.com"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:186:45
+185	        job.recruiter_contact = f"recrutamento@{company.lower().replace(' ', '').replace('.', '')[:20]}.com"
+186	        job.recruiter_phone   = f"+55 (11) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}"
+187	        job.company_address   = location
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:186:74
+185	        job.recruiter_contact = f"recrutamento@{company.lower().replace(' ', '').replace('.', '')[:20]}.com"
+186	        job.recruiter_phone   = f"+55 (11) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}"
+187	        job.company_address   = location
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:587:33
+586	        if not job.recruiter_name:
+587	            job.recruiter_name = random.choice([
+588	                "Ana Silva", "Carlos Souza", "Juliana Costa", "Marcos Oliveira"
+589	            ])
+590	        if not job.recruiter_contact:
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:593:45
+592	
+593	        job.recruiter_phone   = f"+55 (11) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}"
+594	        job.company_address   = f"Av. Paulista, {random.randint(100, 2000)}, Bela Vista, São Paulo - SP, Brasil"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:593:74
+592	
+593	        job.recruiter_phone   = f"+55 (11) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}"
+594	        job.company_address   = f"Av. Paulista, {random.randint(100, 2000)}, Bela Vista, São Paulo - SP, Brasil"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/linkedin_bot.py:594:49
+593	        job.recruiter_phone   = f"+55 (11) 9{random.randint(8000, 9999)}-{random.randint(1000, 9999)}"
+594	        job.company_address   = f"Av. Paulista, {random.randint(100, 2000)}, Bela Vista, São Paulo - SP, Brasil"
+595	        db.commit()
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:327:8
+326	        "n8n_webhook_url": "",
+327	        "telegram_token": "",
+328	        "telegram_chat_id": "",
+329	        "smtp_email": "",
+330	        "smtp_password": "",
+331	        "smtp_host": "smtp.gmail.com",
+332	        "smtp_port": "465",
+333	        "notify_email": "",
+334	        "generic_webhook_url": "",
+335	        "google_maps_api_key": "",
+336	        "linkedin_client_id": "",
+337	        "linkedin_client_secret": "",
+338	        "frontend_url": "http://localhost:5173",
+339	        "keywords": "Desenvolvedor React, Python Developer, Full Stack",
+340	        "resume_text": "",
+341	        "search_location": "Brasil",
+342	        "search_scope": "pais",
+343	        "enable_web_search": "true",
+344	        "pix_key": "",
+345	        "stripe_public_key": "",
+346	        "allow_domain_signup": "false",
+347	        "power_bi_iframe_url": ""
+348	    }
+349	    for key, val in defaults.items():
+350	        if key not in config_dict:
+351	            config_dict[key] = val
+352	            
+353	    # Mask and filter sensitive variables for security
+354	    masked_dict = {}
+355	    SENSITIVE_KEYS = ["gemini_api_key", "linkedin_cookie", "smtp_password", "telegram_token"]
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:330:8
+329	        "smtp_email": "",
+330	        "smtp_password": "",
+331	        "smtp_host": "smtp.gmail.com",
+332	        "smtp_port": "465",
+333	        "notify_email": "",
+334	        "generic_webhook_url": "",
+335	        "google_maps_api_key": "",
+336	        "linkedin_client_id": "",
+337	        "linkedin_client_secret": "",
+338	        "frontend_url": "http://localhost:5173",
+339	        "keywords": "Desenvolvedor React, Python Developer, Full Stack",
+340	        "resume_text": "",
+341	        "search_location": "Brasil",
+342	        "search_scope": "pais",
+343	        "enable_web_search": "true",
+344	        "pix_key": "",
+345	        "stripe_public_key": "",
+346	        "allow_domain_signup": "false",
+347	        "power_bi_iframe_url": ""
+348	    }
+349	    for key, val in defaults.items():
+350	        if key not in config_dict:
+351	            config_dict[key] = val
+352	            
+353	    # Mask and filter sensitive variables for security
+354	    masked_dict = {}
+355	    SENSITIVE_KEYS = ["gemini_api_key", "linkedin_cookie", "smtp_password", "telegram_token"]
+356	    PRIVATE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id"]
+357	    
+358	    for k, v in config_dict.items():
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:337:8
+336	        "linkedin_client_id": "",
+337	        "linkedin_client_secret": "",
+338	        "frontend_url": "http://localhost:5173",
+339	        "keywords": "Desenvolvedor React, Python Developer, Full Stack",
+340	        "resume_text": "",
+341	        "search_location": "Brasil",
+342	        "search_scope": "pais",
+343	        "enable_web_search": "true",
+344	        "pix_key": "",
+345	        "stripe_public_key": "",
+346	        "allow_domain_signup": "false",
+347	        "power_bi_iframe_url": ""
+348	    }
+349	    for key, val in defaults.items():
+350	        if key not in config_dict:
+351	            config_dict[key] = val
+352	            
+353	    # Mask and filter sensitive variables for security
+354	    masked_dict = {}
+355	    SENSITIVE_KEYS = ["gemini_api_key", "linkedin_cookie", "smtp_password", "telegram_token"]
+356	    PRIVATE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id"]
+357	    
+358	    for k, v in config_dict.items():
+359	        if k.startswith("enc_"):
+360	            continue
+361	        if k in PRIVATE_KEYS:
+362	            continue
+363	        if k in SENSITIVE_KEYS:
+364	            if v:
+365	                masked_dict[k] = "••••••••••••••••"
+
+--------------------------------------------------
+>> Issue: [B113:request_without_timeout] Call to requests without timeout
+   Severity: Medium   Confidence: Low
+   CWE: CWE-400 (https://cwe.mitre.org/data/definitions/400.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html
+   Location: backend/main.py:471:17
+470	
+471	    token_resp = requests.post(
+472	        "https://www.linkedin.com/oauth/v2/accessToken",
+473	        data={
+474	            "grant_type": "authorization_code",
+475	            "code": code,
+476	            "redirect_uri": redirect_uri,
+477	            "client_id": client_id,
+478	            "client_secret": client_secret
+479	        },
+480	        headers={"Content-Type": "application/x-www-form-urlencoded"}
+481	    )
+482	
+
+--------------------------------------------------
+>> Issue: [B113:request_without_timeout] Call to requests without timeout
+   Severity: Medium   Confidence: Low
+   CWE: CWE-400 (https://cwe.mitre.org/data/definitions/400.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html
+   Location: backend/main.py:493:19
+492	    profile_email = ""
+493	    profile_resp = requests.get(
+494	        "https://api.linkedin.com/v2/me",
+495	        headers={"Authorization": f"Bearer {access_token}"}
+496	    )
+497	    if profile_resp.ok:
+
+--------------------------------------------------
+>> Issue: [B113:request_without_timeout] Call to requests without timeout
+   Severity: Medium   Confidence: Low
+   CWE: CWE-400 (https://cwe.mitre.org/data/definitions/400.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b113_request_without_timeout.html
+   Location: backend/main.py:504:17
+503	
+504	    email_resp = requests.get(
+505	        "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
+506	        headers={"Authorization": f"Bearer {access_token}"}
+507	    )
+508	    if email_resp.ok:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:623:12
+622	                j.link = f"https://vagasync.com.br/vagas/{j.id}"
+623	            except Exception:
+624	                pass
+625	
+
+--------------------------------------------------
+>> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
+   Severity: High   Confidence: High
+   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
+   Location: backend/main.py:634:16
+633	    from datetime import timedelta
+634	    unique_id = hashlib.md5(f"{payload.title}{payload.company}{datetime.utcnow().isoformat()}".encode()).hexdigest()[:12]
+635	    now = datetime.utcnow()
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b112_try_except_continue.html
+   Location: backend/main.py:753:8
+752	            break
+753	        except Exception:
+754	            continue
+755	            
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'admin123'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1181:81
+1180	    is_valid_email = payload.email in ["admin@vagasync.com", "ricardo@vagasync.com.br", "ricardo@vagasync.com"]
+1181	    is_valid_pw = (payload.email == "admin@vagasync.com" and payload.password == "admin123") or \
+1182	                   (payload.email in ["ricardo@vagasync.com.br", "ricardo@vagasync.com"] and payload.password == "Vagasync2026#")
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'Vagasync2026#'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1182:113
+1181	    is_valid_pw = (payload.email == "admin@vagasync.com" and payload.password == "admin123") or \
+1182	                   (payload.email in ["ricardo@vagasync.com.br", "ricardo@vagasync.com"] and payload.password == "Vagasync2026#")
+1183	    
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:1308:16
+1307	                    dt = datetime.strptime(t.created_at.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+1308	                except:
+1309	                    pass
+1310	        if dt:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:1326:16
+1325	                    dt = datetime.strptime(e.date.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+1326	                except:
+1327	                    pass
+1328	        if dt:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:1538:8
+1537	            expense_date = datetime.strptime(payload.date, "%Y-%m-%d")
+1538	        except:
+1539	            pass
+1540	    expense = FinancialExpense(
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1625:8
+1624	    defaults = {
+1625	        "stripe_secret_key": "",
+1626	        "stripe_public_key": "",
+1627	        "mercadopago_access_token": "",
+1628	        "mercadopago_public_key": "",
+1629	        "pix_key": "",
+1630	        "bank_name": "",
+1631	        "bank_agency": "",
+1632	        "bank_account": "",
+1633	        "bank_owner_name": "",
+1634	        "owner_tax_id": "",
+1635	        "ga4_measurement_id": "",
+1636	        "google_tag_manager_id": "",
+1637	        "facebook_pixel_id": "",
+1638	        "microsoft_clarity_id": "",
+1639	        "google_ads_client_id": "",
+1640	        "google_ads_client_secret": "",
+1641	        "google_ads_developer_token": "",
+1642	        "google_ads_customer_id": "",
+1643	        "facebook_ads_client_id": "",
+1644	        "facebook_ads_client_secret": "",
+1645	        "facebook_ads_account_id": "",
+1646	        "seo_title": "VagaSync - Automatize sua busca por vagas",
+1647	        "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
+1648	        "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
+1649	        "plans_json": '[{"name": "Gratuito", "price": 0, "features": ["10 candidaturas/mês", "Análise simples de IA"]}, {"name": "Premium", "price": 29.90, "features": ["Candidaturas ilimitadas", "Treino de Entrevista", "Fila Prioritária", "WebRTC Meet com RH"]}]',
+1650	        "coupons_json": '[{"code": "VAGASYNC10", "discount": 10, "active": true}, {"code": "PROMO50", "discount": 50, "active": true}]',
+1651	        "gemini_api_key": "",
+1652	        "linkedin_cookie": "",
+1653	        "whatsapp_phone": "",
+1654	        "whatsapp_webhook": "",
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1627:8
+1626	        "stripe_public_key": "",
+1627	        "mercadopago_access_token": "",
+1628	        "mercadopago_public_key": "",
+1629	        "pix_key": "",
+1630	        "bank_name": "",
+1631	        "bank_agency": "",
+1632	        "bank_account": "",
+1633	        "bank_owner_name": "",
+1634	        "owner_tax_id": "",
+1635	        "ga4_measurement_id": "",
+1636	        "google_tag_manager_id": "",
+1637	        "facebook_pixel_id": "",
+1638	        "microsoft_clarity_id": "",
+1639	        "google_ads_client_id": "",
+1640	        "google_ads_client_secret": "",
+1641	        "google_ads_developer_token": "",
+1642	        "google_ads_customer_id": "",
+1643	        "facebook_ads_client_id": "",
+1644	        "facebook_ads_client_secret": "",
+1645	        "facebook_ads_account_id": "",
+1646	        "seo_title": "VagaSync - Automatize sua busca por vagas",
+1647	        "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
+1648	        "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
+1649	        "plans_json": '[{"name": "Gratuito", "price": 0, "features": ["10 candidaturas/mês", "Análise simples de IA"]}, {"name": "Premium", "price": 29.90, "features": ["Candidaturas ilimitadas", "Treino de Entrevista", "Fila Prioritária", "WebRTC Meet com RH"]}]',
+1650	        "coupons_json": '[{"code": "VAGASYNC10", "discount": 10, "active": true}, {"code": "PROMO50", "discount": 50, "active": true}]',
+1651	        "gemini_api_key": "",
+1652	        "linkedin_cookie": "",
+1653	        "whatsapp_phone": "",
+1654	        "whatsapp_webhook": "",
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1640:8
+1639	        "google_ads_client_id": "",
+1640	        "google_ads_client_secret": "",
+1641	        "google_ads_developer_token": "",
+1642	        "google_ads_customer_id": "",
+1643	        "facebook_ads_client_id": "",
+1644	        "facebook_ads_client_secret": "",
+1645	        "facebook_ads_account_id": "",
+1646	        "seo_title": "VagaSync - Automatize sua busca por vagas",
+1647	        "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
+1648	        "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
+1649	        "plans_json": '[{"name": "Gratuito", "price": 0, "features": ["10 candidaturas/mês", "Análise simples de IA"]}, {"name": "Premium", "price": 29.90, "features": ["Candidaturas ilimitadas", "Treino de Entrevista", "Fila Prioritária", "WebRTC Meet com RH"]}]',
+1650	        "coupons_json": '[{"code": "VAGASYNC10", "discount": 10, "active": true}, {"code": "PROMO50", "discount": 50, "active": true}]',
+1651	        "gemini_api_key": "",
+1652	        "linkedin_cookie": "",
+1653	        "whatsapp_phone": "",
+1654	        "whatsapp_webhook": "",
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+1672	            
+1673	    return decrypted_configs
+1674	 
+1675	@app.post("/api/admin/config")
+1676	def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+1677	    data_dict = data.dict(exclude_unset=True)
+1678	    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret"]
+1679	    
+1680	    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+1681	    keys_to_remove = []
+1682	    for k, v in data_dict.items():
+1683	        if isinstance(v, str) and ("••••" in v or v.strip() == ""):
+1684	            keys_to_remove.append(k)
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1641:8
+1640	        "google_ads_client_secret": "",
+1641	        "google_ads_developer_token": "",
+1642	        "google_ads_customer_id": "",
+1643	        "facebook_ads_client_id": "",
+1644	        "facebook_ads_client_secret": "",
+1645	        "facebook_ads_account_id": "",
+1646	        "seo_title": "VagaSync - Automatize sua busca por vagas",
+1647	        "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
+1648	        "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
+1649	        "plans_json": '[{"name": "Gratuito", "price": 0, "features": ["10 candidaturas/mês", "Análise simples de IA"]}, {"name": "Premium", "price": 29.90, "features": ["Candidaturas ilimitadas", "Treino de Entrevista", "Fila Prioritária", "WebRTC Meet com RH"]}]',
+1650	        "coupons_json": '[{"code": "VAGASYNC10", "discount": 10, "active": true}, {"code": "PROMO50", "discount": 50, "active": true}]',
+1651	        "gemini_api_key": "",
+1652	        "linkedin_cookie": "",
+1653	        "whatsapp_phone": "",
+1654	        "whatsapp_webhook": "",
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+1672	            
+1673	    return decrypted_configs
+1674	 
+1675	@app.post("/api/admin/config")
+1676	def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+1677	    data_dict = data.dict(exclude_unset=True)
+1678	    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret"]
+1679	    
+1680	    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+1681	    keys_to_remove = []
+1682	    for k, v in data_dict.items():
+1683	        if isinstance(v, str) and ("••••" in v or v.strip() == ""):
+1684	            keys_to_remove.append(k)
+1685	    for k in keys_to_remove:
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1644:8
+1643	        "facebook_ads_client_id": "",
+1644	        "facebook_ads_client_secret": "",
+1645	        "facebook_ads_account_id": "",
+1646	        "seo_title": "VagaSync - Automatize sua busca por vagas",
+1647	        "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
+1648	        "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
+1649	        "plans_json": '[{"name": "Gratuito", "price": 0, "features": ["10 candidaturas/mês", "Análise simples de IA"]}, {"name": "Premium", "price": 29.90, "features": ["Candidaturas ilimitadas", "Treino de Entrevista", "Fila Prioritária", "WebRTC Meet com RH"]}]',
+1650	        "coupons_json": '[{"code": "VAGASYNC10", "discount": 10, "active": true}, {"code": "PROMO50", "discount": 50, "active": true}]',
+1651	        "gemini_api_key": "",
+1652	        "linkedin_cookie": "",
+1653	        "whatsapp_phone": "",
+1654	        "whatsapp_webhook": "",
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+1672	            
+1673	    return decrypted_configs
+1674	 
+1675	@app.post("/api/admin/config")
+1676	def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+1677	    data_dict = data.dict(exclude_unset=True)
+1678	    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret"]
+1679	    
+1680	    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+1681	    keys_to_remove = []
+1682	    for k, v in data_dict.items():
+1683	        if isinstance(v, str) and ("••••" in v or v.strip() == ""):
+1684	            keys_to_remove.append(k)
+1685	    for k in keys_to_remove:
+1686	        data_dict.pop(k)
+1687	
+1688	    # 2. Validação Ativa com APIs dos Provedores Financeiros
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1656:8
+1655	        "n8n_webhook_url": "",
+1656	        "telegram_token": "",
+1657	        "telegram_chat_id": "",
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+1672	            
+1673	    return decrypted_configs
+1674	 
+1675	@app.post("/api/admin/config")
+1676	def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+1677	    data_dict = data.dict(exclude_unset=True)
+1678	    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret"]
+1679	    
+1680	    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+1681	    keys_to_remove = []
+1682	    for k, v in data_dict.items():
+1683	        if isinstance(v, str) and ("••••" in v or v.strip() == ""):
+1684	            keys_to_remove.append(k)
+1685	    for k in keys_to_remove:
+1686	        data_dict.pop(k)
+1687	
+1688	    # 2. Validação Ativa com APIs dos Provedores Financeiros
+1689	    stripe_key = data_dict.get("stripe_secret_key")
+1690	    if stripe_key:
+1691	        old_stripe_enc = db.query(Config).filter(Config.key == "enc_stripe_secret_key").first()
+1692	        old_stripe_plain = db.query(Config).filter(Config.key == "stripe_secret_key").first()
+1693	        old_stripe_val = security.decrypt_data(old_stripe_enc.value) if old_stripe_enc and old_stripe_enc.value else (old_stripe_plain.value if old_stripe_plain else None)
+1694	        
+1695	        if stripe_key != old_stripe_val:
+1696	            try:
+1697	                res_stripe = requests.get("https://api.stripe.com/v1/balance", auth=(stripe_key, ""), timeout=5)
+1698	                if res_stripe.status_code != 200:
+1699	                    print("AVISO: Chave da Stripe não validada.")
+1700	            except requests.exceptions.RequestException:
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1659:8
+1658	        "smtp_email": "",
+1659	        "smtp_password": "",
+1660	        "smtp_host": "smtp.gmail.com",
+1661	        "smtp_port": "465",
+1662	        "notify_email": "",
+1663	        "generic_webhook_url": "",
+1664	        "allow_domain_signup": "false",
+1665	        "power_bi_iframe_url": "",
+1666	        "influencimax_active": False
+1667	    }
+1668	    
+1669	    for k, v in defaults.items():
+1670	        if k not in decrypted_configs:
+1671	            decrypted_configs[k] = v
+1672	            
+1673	    return decrypted_configs
+1674	 
+1675	@app.post("/api/admin/config")
+1676	def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+1677	    data_dict = data.dict(exclude_unset=True)
+1678	    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret"]
+1679	    
+1680	    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+1681	    keys_to_remove = []
+1682	    for k, v in data_dict.items():
+1683	        if isinstance(v, str) and ("••••" in v or v.strip() == ""):
+1684	            keys_to_remove.append(k)
+1685	    for k in keys_to_remove:
+1686	        data_dict.pop(k)
+1687	
+1688	    # 2. Validação Ativa com APIs dos Provedores Financeiros
+1689	    stripe_key = data_dict.get("stripe_secret_key")
+1690	    if stripe_key:
+1691	        old_stripe_enc = db.query(Config).filter(Config.key == "enc_stripe_secret_key").first()
+1692	        old_stripe_plain = db.query(Config).filter(Config.key == "stripe_secret_key").first()
+1693	        old_stripe_val = security.decrypt_data(old_stripe_enc.value) if old_stripe_enc and old_stripe_enc.value else (old_stripe_plain.value if old_stripe_plain else None)
+1694	        
+1695	        if stripe_key != old_stripe_val:
+1696	            try:
+1697	                res_stripe = requests.get("https://api.stripe.com/v1/balance", auth=(stripe_key, ""), timeout=5)
+1698	                if res_stripe.status_code != 200:
+1699	                    print("AVISO: Chave da Stripe não validada.")
+1700	            except requests.exceptions.RequestException:
+1701	                pass
+1702	
+1703	    mp_token = data_dict.get("mercadopago_access_token")
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'APP_USR-4507102245350291-062423-68e956beec18cccd87d8fd7076d61b79-3497353538'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/main.py:1807:18
+1806	
+1807	MP_ACCESS_TOKEN = "APP_USR-4507102245350291-062423-68e956beec18cccd87d8fd7076d61b79-3497353538"
+1808	MP_PUBLIC_KEY   = "APP_USR-4476dff4-a6b7-4e9d-97fb-90463b90060f"
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/main.py:2390:15
+2389	            import random
+2390	            if random.random() > 0.4:
+2391	                rtype = random.choice(["like", "clap", "love", "idea"])
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/main.py:2391:24
+2390	            if random.random() > 0.4:
+2391	                rtype = random.choice(["like", "clap", "love", "idea"])
+2392	                r = FeedReaction(post_id=post.id, user_email="agent@vagasync.com.br", reaction_type=rtype)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   CWE: CWE-330 (https://cwe.mitre.org/data/definitions/330.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b311-random
+   Location: backend/main.py:2427:11
+2426	        import random
+2427	        if random.random() > 0.6:
+2428	            try:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:3155:16
+3154	                    db.commit()
+3155	                except Exception:
+3156	                    pass
+3157	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:3179:16
+3178	                    db.commit()
+3179	                except Exception:
+3180	                    pass
+3181	
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'vagasync_super_secret_jwt_key_2026'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/security.py:10:13
+9	
+10	JWT_SECRET = "vagasync_super_secret_jwt_key_2026"
+11	ENCRYPTION_SECRET = "vagasyncsuperadminfinancialsecret2026"
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'vagasyncsuperadminfinancialsecret2026'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/security.py:11:20
+10	JWT_SECRET = "vagasync_super_secret_jwt_key_2026"
+11	ENCRYPTION_SECRET = "vagasyncsuperadminfinancialsecret2026"
+12	TOTP_SECRET = "VAGASYNCSUPERADM" # base32 format (16 chars)
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'VAGASYNCSUPERADM'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: backend/security.py:12:14
+11	ENCRYPTION_SECRET = "vagasyncsuperadminfinancialsecret2026"
+12	TOTP_SECRET = "VAGASYNCSUPERADM" # base32 format (16 chars)
+13	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/security.py:38:4
+37	                return True
+38	    except Exception:
+39	        pass
+40	    return False
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 4795
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 46
+		Medium: 4
+		High: 1
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 3
+		Medium: 18
+		High: 30
+Files skipped (0):

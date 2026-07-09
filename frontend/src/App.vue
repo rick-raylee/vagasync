@@ -503,6 +503,246 @@ const authMode = ref('login'); // 'login' or 'signup'
 const authForm = ref({ name: '', email: '', password: '', linkLinkedIn: true, role: 'candidate' });
 const userRole = ref(localStorage.getItem('vagasync_role') || 'candidate');
 
+// Rastreamento, Growth e Monetização SaaS
+const showAuthCard = ref(false);
+const landingActiveTab = ref('home');
+const isScrolled = ref(false);
+const activeStoryStep = ref(0);
+const activeMapTooltip = ref(null);
+let handleScrollFn = null;
+const publicStats = ref({ total_jobs: 120, total_candidates: 1450, total_companies: 85, avg_match_score: 84, success_rate: 78 });
+const newsletterEmail = ref('');
+const referralCodeToClaim = ref('');
+const userReferralStats = ref({ referral_code: '', referral_count: 0, referred_list: [] });
+const userNotificationPrefs = ref({ email: true, whatsapp: true, push: true });
+const selectedBlogCategory = ref('Todos');
+const selectedBlogPost = ref(null);
+
+// Wrapper HTTP com Autenticação JWT
+const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem('vagasync_token');
+  const headers = { ...options.headers };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return fetch(url, { ...options, headers });
+};
+
+// Helper de Rastreamento Analytics (GA4 / Meta Pixel)
+const trackEvent = (eventName, params = {}) => {
+  if (localStorage.getItem('vagasync_cookie_consent') === 'false') return;
+  console.log(`[Analytics Event] ${eventName}`, params);
+  
+  // Google Analytics
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', eventName, params);
+  }
+  
+  // Facebook / Meta Pixel
+  if (typeof window.fbq === 'function') {
+    if (eventName === 'sign_up') {
+      window.fbq('track', 'CompleteRegistration', params);
+    } else if (eventName === 'purchase') {
+      window.fbq('track', 'Purchase', { value: params.value, currency: params.currency || 'BRL' });
+    } else {
+      window.fbq('trackCustom', eventName, params);
+    }
+  }
+};
+
+// Carrega Estatísticas Reais da Landing Page
+const loadPublicStats = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/public-stats`);
+    if (res.ok) {
+      publicStats.value = await res.json();
+    }
+  } catch (e) {
+    console.error("Erro ao carregar estatísticas públicas:", e);
+  }
+};
+
+// Carrega Estatísticas de Indicação do Usuário
+const loadReferralStats = async () => {
+  if (!isLoggedIn.value) return;
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/referral/stats`);
+    if (res.ok) {
+      userReferralStats.value = await res.json();
+    }
+  } catch (e) {
+    console.error("Erro ao carregar stats de indicação:", e);
+  }
+};
+
+// Reivindicar Indicação (Código do Amigo)
+const handleClaimReferral = async () => {
+  const cleanCode = (referralCodeToClaim.value || '').trim();
+  if (!cleanCode) return;
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/referral/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: cleanCode })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      showToast('Indicação Resgatada!', data.message, 'success');
+      referralCodeToClaim.value = '';
+      await loadReferralStats();
+    } else {
+      const err = await res.json();
+      showToast('Falha no Resgate', err.detail || 'Não foi possível reivindicar o código.', 'error');
+    }
+  } catch (e) {
+    showToast('Erro', 'Erro ao processar resgate.', 'error');
+  }
+};
+
+// Subscrever Newsletter
+const handleSubscribeNewsletter = async () => {
+  if (!newsletterEmail.value.trim()) return;
+  try {
+    const res = await fetch(`${API_BASE}/newsletter/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: newsletterEmail.value.trim() })
+    });
+    if (res.ok) {
+      showToast('Inscrição Realizada!', 'Você se cadastrou na nossa newsletter.', 'success');
+      newsletterEmail.value = '';
+      trackEvent('subscribe_newsletter');
+    } else {
+      showToast('Erro', 'Não foi possível realizar a inscrição.', 'error');
+    }
+  } catch (e) {
+    showToast('Erro', 'Falha ao conectar.', 'error');
+  }
+};
+
+// Salvar Preferências de Notificação no Backend
+const handleSaveNotificationPrefs = async () => {
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/user/notification-preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: userNotificationPrefs.value.email,
+        whatsapp: userNotificationPrefs.value.whatsapp,
+        push: userNotificationPrefs.value.push
+      })
+    });
+    if (res.ok) {
+      showToast('Configurações Salvas', 'Preferências de comunicação atualizadas com sucesso.', 'success');
+    }
+  } catch (e) {
+    console.error("Erro ao salvar preferências de comunicação:", e);
+  }
+};
+
+// Iniciar Checkout Stripe Real
+const handleCreateStripeCheckout = async (planId) => {
+  const userEmail = localStorage.getItem('vagasync_profile_email') || 'candidato@vagasync.com.br';
+  trackEvent('payment_initiate', { plan_id: planId, email: userEmail, gateway: 'stripe' });
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/payments/create-stripe-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId, user_email: userEmail })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.checkout_url) {
+        showToast('Redirecionando...', 'Você será redirecionado para a Stripe segura.', 'info');
+        window.location.href = data.checkout_url;
+      }
+    } else {
+      const err = await res.json();
+      showToast('Erro Checkout', err.detail || 'Falha ao iniciar pagamento Stripe.', 'error');
+    }
+  } catch (e) {
+    showToast('Erro de Conexão', 'Erro ao iniciar Stripe.', 'error');
+  }
+};
+
+// SEO Dinâmico - Watcher do Tab
+watch(activeTab, (newTab) => {
+  let title = 'VagaSync | Automação e Busca de Vagas com IA';
+  let desc = 'Use inteligência artificial para automatizar candidaturas e otimizar currículos.';
+  let keywords = 'vagas, ia, automacao, linkedin, curriculo';
+  
+  if (newTab === 'dashboard') {
+    title = 'Painel Candidato | VagaSync';
+    desc = 'Acompanhe as vagas correspondentes e automações ativas.';
+  } else if (newTab === 'recruiter_dashboard') {
+    title = 'Painel Recrutador | VagaSync';
+    desc = 'Publique vagas e faça triagem inteligente de candidatos por IA.';
+  } else if (newTab === 'resume') {
+    title = 'Currículo & Perfil IA | VagaSync';
+    desc = 'Importe seu currículo e mapeie competências técnicas com Gemini.';
+  } else if (newTab === 'career') {
+    title = 'Desenvolvimento de Carreira | VagaSync';
+  } else if (newTab === 'interview') {
+    title = 'Treino de Entrevista | VagaSync';
+  }
+  
+  document.title = title;
+  
+  // Atualiza as tags meta principais
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', desc);
+  
+  const metaKey = document.querySelector('meta[name="keywords"]') || document.createElement('meta');
+  metaKey.name = 'keywords';
+  metaKey.content = keywords;
+  if (!metaKey.parentNode) document.head.appendChild(metaKey);
+});
+
+// Watcher do Tab da Landing Page para SEO Dinâmico de Visitantes
+watch(landingActiveTab, (newTab) => {
+  let title = 'VagaSync | Automação e Busca de Vagas com IA';
+  let desc = 'Automatize inscrições e multiplique suas chances de entrevista usando inteligência artificial.';
+  
+  if (newTab === 'como-funciona') {
+    title = 'Como Funciona | VagaSync';
+    desc = 'Entenda a tecnologia por trás do robô de candidaturas e do match de IA.';
+  } else if (newTab === 'quem-somos') {
+    title = 'Quem Somos | VagaSync';
+    desc = 'Saiba mais sobre a nossa missão de revolucionar a busca por emprego.';
+  } else if (newTab === 'planos') {
+    title = 'Planos e Preços | VagaSync';
+    desc = 'Conheça nossos planos e invista em sua carreira com o VagaSync Premium.';
+  } else if (newTab === 'blog') {
+    title = 'Blog da Carreira | VagaSync';
+    desc = 'Dicas de currículo, entrevistas de emprego e novidades sobre IA no mercado.';
+  } else if (newTab === 'contato') {
+    title = 'Fale Conosco | VagaSync';
+    desc = 'Entre em contato com nossa equipe de suporte e vendas.';
+  }
+  
+  document.title = title;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.setAttribute('content', desc);
+});
+
+const navigateLanding = (tab, pushState = true) => {
+  landingActiveTab.value = tab;
+  selectedBlogPost.value = null;
+  
+  let path = '/';
+  if (tab !== 'home') {
+    if (tab === 'privacidade') path = '/politica-de-privacidade';
+    else if (tab === 'termos') path = '/termos-de-uso';
+    else path = `/${tab}`;
+  }
+  
+  if (pushState) {
+    window.history.pushState({}, '', path);
+  }
+  
+  trackEvent('page_view', { page_path: path, page_title: tab });
+};
+
 // Candidate Test States
 const activeCandidateTest = ref(null);
 const candidateTestAnswers = ref({});
@@ -658,87 +898,113 @@ const isRecruiterPro = computed({
   }
 });
 
-const handleLogin = (e) => {
-  e.preventDefault();
+const handleLogin = async (e) => {
+  if (e) e.preventDefault();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(authForm.value.email)) {
     showToast('E-mail Inválido', 'Por favor, insira um e-mail no formato correto (exemplo@dominio.com).', 'error');
     return;
   }
 
-  // Auto-detect role based on email or fall back to dropdown selection
-  let role = authForm.value.role || 'candidate';
-  const email = authForm.value.email.trim().toLowerCase();
-  if (email === 'recrutador@vagasync.com') {
-    role = 'recruiter';
-  } else if (email === 'admin@vagasync.com') {
-    role = 'super_admin';
-  } else if (email === 'candidato@vagasync.com') {
-    role = 'candidate';
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: authForm.value.email, password: authForm.value.password })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('vagasync_token', data.access_token);
+      localStorage.setItem('vagasync_refresh', data.refresh_token);
+      localStorage.setItem('vagasync_role', data.role);
+      localStorage.setItem('vagasync_logged', 'true');
+      localStorage.setItem('vagasync_profile_name', data.name || '');
+      localStorage.setItem('vagasync_profile_email', authForm.value.email);
+      
+      userRole.value = data.role;
+      isLoggedIn.value = true;
+      showAuthCard.value = false;
+      
+      if (data.role === 'recruiter') {
+        activeTab.value = 'recruiter_dashboard';
+      } else if (data.role === 'super_admin') {
+        activeTab.value = 'super_admin';
+      } else {
+        activeTab.value = 'dashboard';
+      }
+      
+      // Auto-claim pending referral if any
+      const pendingRef = localStorage.getItem('vagasync_pending_ref');
+      if (pendingRef) {
+        try {
+          const claimRes = await fetch(`${API_BASE}/referral/claim`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${data.access_token}`
+            },
+            body: JSON.stringify({ code: pendingRef })
+          });
+          if (claimRes.ok) {
+            const claimData = await claimRes.json();
+            showToast('Indicação Ativada! 🎁', claimData.message, 'success');
+            localStorage.removeItem('vagasync_pending_ref');
+          }
+        } catch (errRef) {
+          console.error("Erro ao resgatar indicação pendente:", errRef);
+        }
+      }
+      
+      await loadReferralStats();
+      showToast('Acesso Autorizado', `Bem-vindo de volta, ${data.name || 'Usuário'}!`, 'success');
+      trackEvent('login', { email: authForm.value.email, role: data.role });
+      
+    } else {
+      const err = await res.json();
+      showToast('Erro de Login', err.detail || 'E-mail ou senha incorretos.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Erro de Conexão', 'Falha ao conectar com o servidor.', 'error');
   }
-
-  localStorage.setItem('vagasync_role', role);
-  userRole.value = role;
-  localStorage.setItem('vagasync_logged', 'true');
-  isLoggedIn.value = true;
-
-  if (role === 'recruiter') {
-    activeTab.value = 'recruiter_dashboard';
-  } else if (role === 'super_admin') {
-    activeTab.value = 'super_admin';
-  } else {
-    activeTab.value = 'dashboard';
-  }
-
-  showToast('Acesso Autorizado', `Bem-vindo de volta! Papel: ${role === 'recruiter' ? 'Recrutador' : role === 'super_admin' ? 'Administrador' : 'Candidato'}.`, 'success');
 };
 
 const showLinkedinOAuthModal = ref(false);
 
-const saveCredentialsAndLoginReal = async () => {
-  if (!config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
-    showToast('Campos Requeridos', 'Por favor, preencha o Client ID e Client Secret para prosseguir.', 'error');
-    return;
-  }
-  try {
-    const res = await fetch(`${API_BASE}/config/init-linkedin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config.value)
-    });
-    if (res.ok) {
-      showToast('Credenciais Salvas', 'Conectando ao LinkedIn para login real...', 'success');
-      setTimeout(() => {
-        window.location.href = `${API_BASE}/linkedin/login`;
-      }, 1000);
-    } else {
-      showToast('Erro', 'Não foi possível salvar as credenciais no backend.', 'error');
-    }
-  } catch (e) {
-    showToast('Erro de Conexão', 'Falha ao conectar com o backend.', 'error');
-  }
-};
-
 const handleLinkedinLogin = () => {
-  if (!config.value || !config.value.linkedin_client_id || !config.value.linkedin_client_secret) {
-    showToast('LinkedIn em Manutenção', 'O login social com LinkedIn está sendo ativado pelo administrador. Por favor, acesse usando e-mail e senha.', 'info');
-  } else {
-    window.location.href = `${API_BASE}/linkedin/login`;
-  }
+  window.location.href = `${API_BASE}/linkedin/login`;
 };
 
 const handleLinkedinCallback = () => {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('linkedin_auth') !== 'success') return;
+  const authStatus = params.get('linkedin_auth');
+  if (!authStatus) return;
 
   const profileName = params.get('linkedin_name') || '';
   const profileEmail = params.get('linkedin_email') || '';
+  const accessToken = params.get('linkedin_token') || '';
+  const roleFromBackend = params.get('linkedin_role') || 'candidate';
+  const errorMessage = params.get('error_message') || '';
+
+  if (authStatus === 'error') {
+    showToast('Falha LinkedIn', errorMessage || 'Erro ao autenticar com o LinkedIn.', 'error');
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  if (authStatus !== 'success' || !accessToken) {
+    return;
+  }
 
   localStorage.setItem('vagasync_logged', 'true');
-  localStorage.setItem('vagasync_role', 'candidate');
-  userRole.value = 'candidate';
+  localStorage.setItem('vagasync_role', roleFromBackend);
+  localStorage.setItem('vagasync_token', accessToken);
+  if (profileName) localStorage.setItem('vagasync_profile_name', profileName);
+  if (profileEmail) localStorage.setItem('vagasync_profile_email', profileEmail);
+  userRole.value = roleFromBackend;
   isLoggedIn.value = true;
-  activeTab.value = 'dashboard';
+  activeTab.value = roleFromBackend === 'recruiter' ? 'recruiter_dashboard' : roleFromBackend === 'super_admin' ? 'super_admin' : 'dashboard';
   localStorage.setItem('vagasync_linkedin_connected', 'true');
   linkedinTrigger.value++;
 
@@ -749,10 +1015,9 @@ const handleLinkedinCallback = () => {
   window.history.replaceState({}, document.title, window.location.pathname);
 };
 
-const handleSignup = (e) => {
+const handleSignup = async (e) => {
   e.preventDefault();
   
-  // 1. Validador de E-mail
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const emailVal = (authForm.value.email || '').trim().toLowerCase();
   if (!emailRegex.test(emailVal)) {
@@ -760,17 +1025,15 @@ const handleSignup = (e) => {
     return;
   }
 
-  // 1.1 Bloqueio de e-mails corporativos do domínio (se configurado como bloqueado)
   const isDomainEmail = emailVal.endsWith('@vagasync.com') || emailVal.endsWith('@vagasync.com.br');
   const isAllowedTestEmail = ['admin@vagasync.com', 'recrutador@vagasync.com', 'candidato@vagasync.com'].includes(emailVal);
   const allowDomainSignup = config.value.allow_domain_signup === 'true';
 
   if (isDomainEmail && !isAllowedTestEmail && !allowDomainSignup) {
-    showToast('Cadastro Não Permitido', 'Cadastros com e-mails institucionais do domínio vagasync.com estão desativados. Use um e-mail pessoal (ex: Gmail, Outlook).', 'error');
+    showToast('Cadastro Não Permitido', 'Cadastros com e-mails do domínio vagasync.com estão desativados.', 'error');
     return;
   }
 
-  // 2. Validador de Senha
   const passwordVal = authForm.value.password || '';
   if (passwordVal.length < 6) {
     showToast('Senha Fraca', 'A senha deve conter no mínimo 6 caracteres.', 'error');
@@ -784,50 +1047,40 @@ const handleSignup = (e) => {
     return;
   }
 
-  // Auto-detect role based on email or fall back to dropdown selection
-  let role = authForm.value.role || 'candidate';
-  const email = authForm.value.email.trim().toLowerCase();
-  if (email === 'recrutador@vagasync.com') {
-    role = 'recruiter';
-  } else if (email === 'admin@vagasync.com') {
-    role = 'super_admin';
-  } else if (email === 'candidato@vagasync.com') {
-    role = 'candidate';
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: authForm.value.name,
+        email: emailVal,
+        password: passwordVal,
+        role: authForm.value.role || 'candidate'
+      })
+    });
+    
+    if (res.ok) {
+      showToast('Conta Criada!', 'Seu cadastro foi realizado com sucesso. Efetuando login...', 'success');
+      trackEvent('sign_up', { email: emailVal, role: authForm.value.role });
+      
+      // Auto login
+      await handleLogin();
+    } else {
+      const err = await res.json();
+      showToast('Erro de Cadastro', err.detail || 'Não foi possível cadastrar a conta.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Erro de Conexão', 'Falha ao conectar com o servidor.', 'error');
   }
-
-  localStorage.setItem('vagasync_role', role);
-  userRole.value = role;
-  localStorage.setItem('vagasync_logged', 'true');
-  isLoggedIn.value = true;
-
-  if (role === 'recruiter') {
-    activeTab.value = 'recruiter_dashboard';
-  } else if (role === 'super_admin') {
-    activeTab.value = 'super_admin';
-  } else {
-    activeTab.value = 'dashboard';
-  }
-
-  // Registrar início do trial conforme o papel
-  if (role === 'recruiter' && !localStorage.getItem('vagasync_recruiter_trial_start')) {
-    localStorage.setItem('vagasync_recruiter_trial_start', Date.now().toString());
-  } else if (role === 'candidate' && !localStorage.getItem('vagasync_candidate_trial_start')) {
-    localStorage.setItem('vagasync_candidate_trial_start', Date.now().toString());
-  }
-
-  // Vincular LinkedIn no cadastro de candidato
-  if (role === 'candidate' && authForm.value.linkLinkedIn) {
-    localStorage.setItem('vagasync_linkedin_connected', 'true');
-    linkedinTrigger.value++;
-  }
-
-  showToast('Conta Criada!', `Seu perfil de ${role === 'recruiter' ? 'Recrutador (30 dias grátis)' : role === 'super_admin' ? 'Administrador' : 'Candidato (7 dias grátis)'} foi configurado.`, 'success');
 };
 
 const handleLogout = () => {
   localStorage.removeItem('vagasync_logged');
   localStorage.removeItem('vagasync_role');
   localStorage.removeItem('vagasync_linkedin_connected');
+  localStorage.removeItem('vagasync_token');
+  localStorage.removeItem('vagasync_refresh');
   linkedinTrigger.value++;
   isLoggedIn.value = false;
   userRole.value = 'candidate';
@@ -944,8 +1197,78 @@ onMounted(() => {
     document.documentElement.classList.remove('light-mode');
   }
 
-  // Handle URL candidate test checking
+  // Scroll listener para Navbar e Storytelling
+  handleScrollFn = () => {
+    isScrolled.value = window.scrollY > 50;
+    const steps = document.querySelectorAll('.story-scroll-step');
+    steps.forEach((step, idx) => {
+      const rect = step.getBoundingClientRect();
+      if (rect.top >= 0 && rect.top <= window.innerHeight * 0.65) {
+        activeStoryStep.value = idx;
+      }
+    });
+  };
+  window.addEventListener('scroll', handleScrollFn);
+
+  // Capturar código de indicação do link (?ref=CODE)
   const urlParams = new URLSearchParams(window.location.search);
+  const refCode = urlParams.get('ref');
+  if (refCode) {
+    localStorage.setItem('vagasync_pending_ref', refCode.trim());
+    showToast('Indicação Detectada! 🎁', 'Conclua seu cadastro ou faça login para resgatar 30 dias grátis.', 'info');
+  }
+
+  // Tratar retorno de checkout Stripe (?stripe_checkout=success)
+  const stripeStatus = urlParams.get('stripe_checkout');
+  if (stripeStatus === 'success') {
+    const planPaid = urlParams.get('plan_id') || 'candidate_premium';
+    if (planPaid === 'candidate_premium') {
+      userFeatures.value.ia_ilimitada = true;
+      localStorage.setItem('vagasync_premium', 'true');
+    } else if (planPaid === 'recruiter_pro') {
+      userFeatures.value.ia_triagem = true;
+      userFeatures.value.videoentrevistas = true;
+      localStorage.setItem('vagasync_recruiter_pro', 'true');
+    }
+    showToast('Pagamento Confirmado! 💳', 'Seu plano VagaSync foi ativado com sucesso e segurança via Stripe.', 'success');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  // Roteamento amigável via path
+  const path = window.location.pathname;
+  if (!isLoggedIn.value) {
+    if (path === '/como-funciona') navigateLanding('como-funciona', false);
+    else if (path === '/quem-somos') navigateLanding('quem-somos', false);
+    else if (path === '/planos') navigateLanding('planos', false);
+    else if (path === '/blog') navigateLanding('blog', false);
+    else if (path === '/contato') navigateLanding('contato', false);
+    else if (path === '/politica-de-privacidade') navigateLanding('privacidade', false);
+    else if (path === '/termos-de-uso') navigateLanding('termos', false);
+    else if (path.startsWith('/blog/')) {
+      navigateLanding('blog', false);
+      // Extrair ID do post (/blog/1-slug -> id = 1)
+      const matches = path.match(/\/blog\/(\d+)/);
+      if (matches && matches[1]) {
+        // Encontra o post correspondente depois que carregar a feed
+        setTimeout(() => {
+          const found = blogPosts.value.find(p => p.id === parseInt(matches[1]));
+          if (found) selectedBlogPost.value = found;
+        }, 1200);
+      }
+    } else {
+      navigateLanding('home', false);
+    }
+  } else {
+    // Se logado e acessou rota específica
+    if (path === '/como-funciona' || path === '/quem-somos' || path === '/planos' || path === '/blog' || path === '/contato') {
+      // Abre a landing logada / institucional se desejar
+    }
+  }
+
+  loadPublicStats();
+  loadReferralStats();
+
+  // Handle URL candidate test checking
   const testId = urlParams.get('test');
   if (testId) {
     loadCandidateTest(testId);
@@ -1048,6 +1371,9 @@ onBeforeUnmount(() => {
   }
   if (pollInterval) {
     clearInterval(pollInterval);
+  }
+  if (handleScrollFn) {
+    window.removeEventListener('scroll', handleScrollFn);
   }
 });
 
@@ -2361,6 +2687,11 @@ const banners = ref([]);
 const newBlogPost = ref({ title: '', summary: '', content: '', image_url: '' });
 const newBanner = ref({ title: '', image_url: '', link_url: '', active: true, position: 'home' });
 
+// Módulo de Marketing Viral com IA
+const viralConfig = ref({ platform: 'reels_tiktok', target_audience: 'candidatos_ti' });
+const viralResult = ref(null);
+const isLoadingViral = ref(false);
+
 // Load all admin data
 const loadAdminData = async () => {
   if (!adminToken.value) return;
@@ -2572,6 +2903,31 @@ const handleDeleteBlogPost = async (id) => {
   }
 };
 
+const generateViralContent = async () => {
+  isLoadingViral.value = true;
+  viralResult.value = null;
+  try {
+    const res = await fetch(`${API_BASE}/admin/generate-viral`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken.value}`
+      },
+      body: JSON.stringify(viralConfig.value)
+    });
+    if (res.ok) {
+      viralResult.value = await res.json();
+      showToast('Conteúdo Gerado!', 'Script viral gerado com sucesso.', 'success');
+    } else {
+      showToast('Erro ao Gerar', 'Não foi possível obter roteiro da API.', 'error');
+    }
+  } catch (err) {
+    showToast('Erro de Conexão', 'Falha ao conectar na API.', 'error');
+  } finally {
+    isLoadingViral.value = false;
+  }
+};
+
 const handleSaveBanner = async (e) => {
   if (e) e.preventDefault();
   if (!newBanner.value.title || !newBanner.value.image_url) return;
@@ -2756,7 +3112,7 @@ const confirmApplyToRecruiterJob = async () => {
 
   const job = selectedJobForApply.value;
   try {
-    const res = await fetch(`${API_BASE}/jobs/${job.id}`, {
+    const res = await fetchWithAuth(`${API_BASE}/jobs/${job.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json'
@@ -2770,8 +3126,8 @@ const confirmApplyToRecruiterJob = async () => {
         localJob.status = 'applied';
       }
       
-      const candidateName = authForm.value.name || 'Candidato VagaSync';
-      const candidateEmail = authForm.value.email || 'candidato@vagasync.com';
+      const candidateName = authForm.value.name || localStorage.getItem('vagasync_profile_name') || 'Candidato VagaSync';
+      const candidateEmail = authForm.value.email || localStorage.getItem('vagasync_profile_email') || 'candidato@vagasync.com';
       
       const newCandidate = {
         id: Date.now(),
@@ -2786,6 +3142,8 @@ const confirmApplyToRecruiterJob = async () => {
       
       recruitedCandidates.value = [newCandidate, ...recruitedCandidates.value];
       saveCandidates();
+      
+      trackEvent('apply_job', { job_id: job.id, job_title: job.title, company: job.company });
       
       showToast(
         'Currículo Enviado!',
@@ -3542,7 +3900,15 @@ const restoreCandidate = () => {
                 style="font-size: 0.75rem; padding: 0.5rem; width: 100%; margin-top: 0.25rem;"
                 @click="submitCardCheckout"
               >
-                🔒 Pagar Assinatura com Cartão
+                🔒 Pagar Assinatura com Cartão (Simulado)
+              </button>
+              <button 
+                type="button" 
+                class="btn btn-primary" 
+                style="font-size: 0.75rem; padding: 0.5rem; width: 100%; margin-top: 0.4rem; background: linear-gradient(90deg, #635bff, #00f2fe); border: none; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;"
+                @click="handleCreateStripeCheckout(checkoutPlan)"
+              >
+                <i class="fa-brands fa-stripe" style="font-size: 1.2rem;"></i> Pagar com Stripe (Real)
               </button>
             </div>
           </div>
@@ -3896,117 +4262,92 @@ const restoreCandidate = () => {
       </div>
     </template>
 
-    <!-- Login/Signup Screen -->
+    <!-- Login/Signup Screen or Landing Page -->
     <template v-else-if="!isLoggedIn">
-      <div class="auth-grid">
-        <!-- Left panel: Presentation -->
-        <div class="auth-left glass-card">
-          <div class="logo-container" style="margin-bottom: 1.5rem;">
-            <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" class="logo-icon-img" style="width: 56px; height: 56px;" />
-            <span class="logo-text" style="font-size: 2.5rem;">Vaga Sync</span>
+      <!-- 1. AUTH SCREEN (shown when showAuthCard is true) -->
+      <div v-if="showAuthCard" style="min-height: 100vh; padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at top, #0f172a, #020617); position: relative; width: 100%;">
+        <!-- Back to Home Button -->
+        <button @click="showAuthCard = false" class="btn" style="position: absolute; top: 1.5rem; left: 1.5rem; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-arrow-left"></i> Voltar para a Home
+        </button>
+        
+        <div class="auth-grid" style="margin-top: 2rem; width: 100%; max-width: 1200px;">
+          <!-- Left panel: Presentation -->
+          <div class="auth-left glass-card">
+            <div class="logo-container" style="margin-bottom: 1.5rem;">
+              <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" class="logo-icon-img" style="width: 56px; height: 56px;" />
+              <span class="logo-text" style="font-size: 2.5rem;">Vaga Sync</span>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 1.05rem; margin-bottom: 1.5rem; line-height: 1.6;">
+              Seu copiloto inteligente de carreira. Sincronize perfis, analise compatibilidade de vagas por IA e automatize candidaturas em lote.
+            </p>
+            
+            <img 
+              src="/vagasync_banner.png"
+              alt="Vaga Sync AI Banner" 
+              class="banner-img" 
+            />
+
+            <div class="features-intro">
+              <h3 style="margin: 1.5rem 0 1.25rem 0; color: var(--color-secondary);">Como Funciona:</h3>
+              <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+                <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                  <img src="/icons/3d/login.png" style="width:34px; height:34px; object-fit:contain;" alt="LinkedIn Logo 3D" />
+                </div>
+                <div>
+                  <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Vincule seu LinkedIn</h4>
+                  <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Conecte seu perfil para puxar e analisar vagas compatíveis diretamente com suas preferências.</p>
+                </div>
+              </div>
+              <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+                <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                  <img src="/icons/3d/deploy.png" style="width:34px; height:34px; object-fit:contain;" alt="Upload CV 3D" />
+                </div>
+                <div>
+                  <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Importação e Mapeamento IA</h4>
+                  <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Carregue seu currículo para mapear competências, calibrar matches e preparar respostas para entrevistas.</p>
+                </div>
+              </div>
+              <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
+                <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
+                  <img src="/icons/3d/chat.png" style="width:34px; height:34px; object-fit:contain;" alt="Autoapply 3D" />
+                </div>
+                <div>
+                  <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Candidaturas Automáticas</h4>
+                  <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Nosso agente automatiza o preenchimento de formulários de vagas da web em segundo plano para você.</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <p style="color: var(--text-secondary); font-size: 1.05rem; margin-bottom: 1.5rem; line-height: 1.6;">
-            Seu copiloto inteligente de carreira. Sincronize perfis, analise compatibilidade de vagas por IA e automatize candidaturas em lote.
-          </p>
-          
-          <img 
-            src="/vagasync_banner.png"
-            alt="Vaga Sync AI Banner" 
-            class="banner-img" 
-          />
 
-          <div class="features-intro">
-            <h3 style="margin: 1.5rem 0 1.25rem 0; color: var(--color-secondary);">Como Funciona:</h3>
-            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
-              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
-                <img src="/icons/3d/login.png" style="width:34px; height:34px; object-fit:contain;" alt="LinkedIn Logo 3D" />
-              </div>
-              <div>
-                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Vincule seu LinkedIn</h4>
-                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Conecte seu perfil para puxar e analisar vagas compatíveis diretamente com suas preferências.</p>
-              </div>
-            </div>
-            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
-              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
-                <img src="/icons/3d/deploy.png" style="width:34px; height:34px; object-fit:contain;" alt="Upload CV 3D" />
-              </div>
-              <div>
-                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Importação e Mapeamento IA</h4>
-                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Envie seu currículo. A IA do Gemini mapeia suas competências técnicas e alinha seu perfil.</p>
-              </div>
-            </div>
-            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
-              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
-                <img src="/icons/3d/briefcase.png" style="width:34px; height:34px; object-fit:contain;" alt="Briefcase 3D" />
-              </div>
-              <div>
-                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Agente de Candidatura</h4>
-                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">O robô Playwright realiza candidaturas simplificadas automáticas em segundo plano.</p>
-              </div>
-            </div>
-            <div class="step-item" style="align-items: center; margin-bottom: 1.25rem;">
-              <div style="flex-shrink:0; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: transform 0.3s ease, border-color 0.3s, background-color 0.3s;" onmouseover="this.style.transform='scale(1.1) rotate(5deg)'; this.style.borderColor='var(--color-secondary)'; this.style.backgroundColor='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.transform='scale(1) rotate(0deg)'; this.style.borderColor='rgba(255,255,255,0.05)'; this.style.backgroundColor='rgba(255,255,255,0.02)'">
-                <img src="/icons/3d/chat.png" style="width:34px; height:34px; object-fit:contain;" alt="Chat 3D" />
-              </div>
-              <div>
-                <h4 style="margin: 0 0 0.15rem 0; font-size: 0.95rem; color: #fff;">Follow-up de RH & WhatsApp</h4>
-                <p style="margin: 0; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4;">Acompanhamento inteligente de análise do RH e alertas instantâneos no seu celular.</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Bloco de Anúncio AdSense (Home) ── -->
-          <div style="margin-top: 1.5rem; width: 100%; border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.015);">
-            <div style="padding: 0.4rem 0.75rem; background: rgba(59,130,246,0.05); border-bottom: 1px solid rgba(59,130,246,0.08); display: flex; align-items: center; gap: 0.4rem;">
-              <i class="fa-solid fa-rectangle-ad" style="color: rgba(148,163,184,0.4); font-size: 0.7rem;"></i>
-              <span style="font-size: 0.65rem; color: rgba(148,163,184,0.4); letter-spacing: 0.05em; text-transform: uppercase;">Publicidade</span>
-            </div>
-            <ins class="adsbygoogle"
-              style="display:block; min-height: 100px;"
-              data-ad-client="ca-pub-1405601693512304"
-              data-ad-slot="auto"
-              data-ad-format="auto"
-              data-full-width-responsive="true">
-            </ins>
-          </div>
-        </div>
-
-        <!-- Right panel: Login/Signup Card -->
-        <div class="auth-right">
-          <div class="glass-card auth-form-card">
-            <!-- Logo do VagaSync no topo do Card -->
-            <div style="text-align: center; margin-bottom: 1.5rem; margin-top: 0.5rem;">
-              <img src="/vagasync_logo.png?v=6" alt="Vaga Sync Logo" style="width: 72px; height: 72px; object-fit: contain; margin-bottom: 0.4rem;" />
-              <div style="font-size: 1.6rem; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
-                Vaga Sync
-              </div>
-            </div>
-
-            <form v-if="authMode === 'login'" @submit="handleLogin">
-              <h2 style="margin-bottom: 0.5rem; font-size: 1.75rem;">Acesse sua Conta</h2>
-              <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
-                Faça login para gerenciar suas candidaturas automatizadas.
-              </p>
-
+          <!-- Right panel: Login/Signup Card -->
+          <div class="auth-right glass-card">
+            <div class="auth-tabs">
               <button 
-                type="button" 
-                class="btn social-btn-linkedin"
-                @click="handleLinkedinLogin"
-                style="position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px;"
+                class="auth-tab-btn" 
+                :class="{ active: authMode === 'login' }"
+                @click="authMode = 'login'"
               >
-                <i class="fa-brands fa-linkedin" style="font-size: 1.25rem; color: #fff;"></i>
-                Entrar com LinkedIn
+                Acessar Conta
               </button>
+              <button 
+                class="auth-tab-btn" 
+                :class="{ active: authMode === 'signup' }"
+                @click="authMode = 'signup'"
+              >
+                Novo Cadastro
+              </button>
+            </div>
 
-              <div class="divider-or">Ou use e-mail</div>
-
+            <!-- Login Form -->
+            <form v-if="authMode === 'login'" @submit="handleLogin">
               <div class="form-group">
                 <label>E-mail Corporativo ou Pessoal</label>
                 <input 
                   type="email" 
                   required
                   class="form-input" 
-                  placeholder="exemplo@vaga-sync.com" 
+                  placeholder="nome@exemplo.com" 
                   v-model="authForm.email"
                 />
               </div>
@@ -4017,53 +4358,45 @@ const restoreCandidate = () => {
                   type="password" 
                   required
                   class="form-input" 
-                  placeholder="••••••••" 
+                  placeholder="Sua senha secreta" 
                   v-model="authForm.password"
                 />
               </div>
 
-              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.25rem;">
-                Entrar no Dashboard
+              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                Entrar na Conta
               </button>
 
-              <p style="text-align: center; font-size: 0.85rem; margin-top: 1.5rem; color: var(--text-secondary);">
-                Não tem conta? 
-                <span 
-                  style="color: var(--color-secondary); cursor: pointer; font-weight: 600;"
-                  @click="authMode = 'signup'"
-                >
-                  Criar uma conta e vincular LinkedIn
-                </span>
-              </p>
-            </form>
-
-            <form v-else @submit="handleSignup">
-              <h2 style="margin-bottom: 0.5rem; font-size: 1.75rem;">Criar Conta</h2>
-              <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem;">
-                Comece a impulsionar sua carreira com inteligência artificial.
-              </p>
-
-              <div class="form-group">
-                <label>Seu Perfil / Papel</label>
-                <select class="form-input" v-model="authForm.role" style="background: #0d1426; color: var(--text-primary); border: 1px solid var(--border-color); margin-bottom: 1rem;">
-                  <option value="candidate">Sou Candidato (Buscar Vagas)</option>
-                  <option value="recruiter">Sou Recrutador/Empresa (Publicar Vagas e Triagem)</option>
-                </select>
+              <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                Ou acesse com segurança via rede profissional:
               </div>
 
+              <button 
+                type="button" 
+                @click="handleLinkedinLogin" 
+                class="btn-linkedin-auth"
+                style="width: 100%; margin-top: 1rem;"
+              >
+                <i class="fa-brands fa-linkedin" style="font-size: 1.25rem;"></i>
+                Entrar com o LinkedIn
+              </button>
+            </form>
+
+            <!-- Signup Form -->
+            <form v-else @submit="handleSignup">
               <div class="form-group">
                 <label>Nome Completo</label>
                 <input 
                   type="text" 
                   required
                   class="form-input" 
-                  placeholder="Ricardo Santos" 
+                  placeholder="Seu nome" 
                   v-model="authForm.name"
                 />
               </div>
 
               <div class="form-group">
-                <label>E-mail</label>
+                <label>E-mail de Contato</label>
                 <input 
                   type="email" 
                   required
@@ -4074,7 +4407,7 @@ const restoreCandidate = () => {
               </div>
 
               <div class="form-group">
-                <label>Senha</label>
+                <label>Senha (Mínimo 6 caracteres, letras e números)</label>
                 <input 
                   type="password" 
                   required
@@ -4084,7 +4417,15 @@ const restoreCandidate = () => {
                 />
               </div>
 
-              <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; margin-bottom: 1.5rem;">
+              <div class="form-group">
+                <label>Eu sou:</label>
+                <select class="form-input" v-model="authForm.role" style="background-color: rgba(6, 9, 19, 0.8); color: #fff;">
+                  <option value="candidate">Candidato (Buscando Emprego)</option>
+                  <option value="recruiter">Recrutador / Empresa (Buscando Talentos)</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; margin-bottom: 1.5rem;" v-if="authForm.role === 'candidate'">
                 <input 
                   type="checkbox" 
                   id="linkedin_chk" 
@@ -4112,28 +4453,432 @@ const restoreCandidate = () => {
             </form>
           </div>
         </div>
+
+        <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; position: relative; width: 100%;">
+          <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
+          <div v-if="footerClickText" style="
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 242, 254, 0.95);
+            color: #060913;
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: nowrap;
+            margin-bottom: 0.5rem;
+            animation: slideUp 0.3s ease;
+            z-index: 100;
+          ">
+            {{ footerClickText }}
+          </div>
+        </footer>
       </div>
-      <footer class="footer-bar" @click="handleFooterClick" style="cursor: pointer; position: relative;">
-        <p>© 2026 Vaga Sync. Todos os direitos reservados. • Conexão Segura SSL • Gemini Core Engine • n8n Connected</p>
-        <div v-if="footerClickText" style="
-          position: absolute;
-          bottom: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          background: rgba(0, 242, 254, 0.95);
-          color: #060913;
-          padding: 0.6rem 1rem;
-          border-radius: 8px;
-          font-size: 0.82rem;
-          font-weight: 600;
-          white-space: nowrap;
-          margin-bottom: 0.5rem;
-          animation: slideUp 0.3s ease;
-          z-index: 100;
-        ">
-          {{ footerClickText }}
-        </div>
-      </footer>
+
+      <!-- 2. SaaS LANDING PAGE (default view when showAuthCard is false) -->
+      <div v-else class="landing-page-container">
+        <!-- Navbar -->
+        <header :class="['landing-nav', { 'landing-nav--solid': isScrolled || landingActiveTab !== 'home' }]">
+          <div class="landing-brand" @click="navigateLanding('home')" role="button" tabindex="0">
+            <img src="/vagasync_logo.png?v=6" alt="VagaSync" class="landing-brand__logo" />
+            <span class="landing-brand__name">VagaSync</span>
+          </div>
+          <nav class="landing-nav__links" aria-label="Navegação principal">
+            <a @click="navigateLanding('como-funciona')" :class="['landing-nav__link', { active: landingActiveTab === 'como-funciona' }]">Como Funciona</a>
+            <a @click="navigateLanding('quem-somos')" :class="['landing-nav__link', { active: landingActiveTab === 'quem-somos' }]">Quem Somos</a>
+            <a @click="navigateLanding('planos')" :class="['landing-nav__link', { active: landingActiveTab === 'planos' }]">Planos</a>
+            <a @click="navigateLanding('blog')" :class="['landing-nav__link', { active: landingActiveTab === 'blog' }]">Blog</a>
+            <a @click="navigateLanding('contato')" :class="['landing-nav__link', { active: landingActiveTab === 'contato' }]">Contato</a>
+          </nav>
+          <button @click="showAuthCard = true" class="btn btn-primary btn-hero" aria-label="Acessar plataforma">Acessar Plataforma</button>
+        </header>
+
+        <!-- Main Content Area based on landingActiveTab -->
+        <main class="landing-main">
+          
+          <!-- TAB: HOME / LANDING PAGE -->
+          <div v-if="landingActiveTab === 'home'" class="landing-home">
+            <!-- Hero Section -->
+            <section class="landing-hero">
+              <div class="landing-hero__badge"><i class="fa-solid fa-bolt"></i> IA Otimizada para o Mercado Real</div>
+              <h1 class="landing-hero__title">Sua Carreira Otimizada e Candidaturas <span>Automatizadas por IA</span></h1>
+              <p class="landing-hero__description">O VagaSync mapeia competências do seu currículo por IA, cruza com centenas de vagas reais da web e automatiza candidaturas e treinos em lote. Economize até 90% do tempo de busca.</p>
+              <div class="landing-hero__actions">
+                <button @click="showAuthCard = true; authMode = 'signup'" class="btn btn-primary btn-hero">Começar Gratuitamente</button>
+                <button @click="navigateLanding('como-funciona')" class="btn btn-secondary">Como Funciona</button>
+              </div>
+
+              <div class="landing-hero__visual">
+                <div class="hero-visual__frame">
+                  <img src="/vagasync_banner.png" alt="Plataforma VagaSync Mockup" class="hero-visual__image" loading="lazy" />
+                </div>
+                <div class="hero-scroll-indicator" aria-hidden="true">
+                  <span class="hero-scroll-indicator__arrow"></span>
+                  <span>Desça para ver como funciona</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Real Stats Dashboard Row -->
+            <section class="stats-grid" aria-label="Estatísticas públicas do VagaSync">
+              <div class="stats-card">
+                <div class="stats-card__value">{{ publicStats.total_jobs }}</div>
+                <div class="stats-card__label">Vagas Mapeadas Ativas</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-card__value">{{ publicStats.total_candidates }}</div>
+                <div class="stats-card__label">Candidatos Cadastrados</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-card__value">{{ publicStats.total_companies }}</div>
+                <div class="stats-card__label">Empresas & Recrutadores</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-card__value">{{ publicStats.avg_match_score }}%</div>
+                <div class="stats-card__label">Precisão Média Match de IA</div>
+              </div>
+            </section>
+
+            <!-- Premium Features / Value Propositions -->
+            <section class="value-grid" aria-label="Experiências premium VagaSync">
+              <div class="feature-card">
+                <div class="feature-card__icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <h3>Para Candidatos</h3>
+                <p>Acelere sua recolocação profissional com ferramentas inteligentes de automação e preparação.</p>
+                <ul>
+                  <li><i class="fa-solid fa-check"></i> <strong>Otimização de CV por IA:</strong> Mapeie pontos fortes e fracos frente às vagas.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Candidatura Automatizada:</strong> Robô preenche formulários por você.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Treino de Entrevistas:</strong> Simulações reais com feedback do Gemini.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Radar de Oportunidades:</strong> Alertas imediatos via WhatsApp ou Push.</li>
+                </ul>
+                <button @click="showAuthCard = true; authForm.role = 'candidate'; authMode = 'signup'" class="btn btn-primary btn-hero">Buscar Vagas com IA</button>
+              </div>
+              <div class="feature-card">
+                <div class="feature-card__icon feature-card__icon--blue"><i class="fa-solid fa-briefcase"></i></div>
+                <h3>Para Recrutadores</h3>
+                <p>Simplifique a triagem técnica, reduza o tempo de seleção e contrate talentos compatíveis com alta precisão.</p>
+                <ul>
+                  <li><i class="fa-solid fa-check"></i> <strong>Triagem por IA:</strong> Classificação inteligente com notas de compatibilidade.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Gerador de Avaliações:</strong> Testes técnicos e comportamentais gerados por IA.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Chat Direto com Candidatos:</strong> Converse e agende entrevistas de forma ágil.</li>
+                  <li><i class="fa-solid fa-check"></i> <strong>Painel ATS Completo:</strong> Acompanhamento visual de funil por status.</li>
+                </ul>
+                <button @click="showAuthCard = true; authForm.role = 'recruiter'; authMode = 'signup'" class="btn btn-primary btn-hero">Publicar Vaga e Triar</button>
+              </div>
+            </section>
+
+            <!-- FAQ Section -->
+            <section class="faq-section" aria-label="Perguntas frequentes do VagaSync">
+              <div class="faq-header">
+                <h2>Perguntas Frequentes</h2>
+                <p>Tire suas dúvidas rápidas sobre o funcionamento do VagaSync.</p>
+              </div>
+              <div class="faq-list">
+                <details>
+                  <summary>Como a inteligência artificial realiza o match?</summary>
+                  <p>Nossa IA lê as informações extraídas do seu currículo e compara semanticamente com as competências, cargo, ferramentas exigidas e atribuições informadas no escopo da vaga. Ela atribui uma nota de 0 a 100 e explica detalhadamente onde há compatibilidade ou onde há lacunas técnicas.</p>
+                </details>
+                <details>
+                  <summary>O robô de candidatura é seguro e respeita as plataformas?</summary>
+                  <p>Sim. O robô opera realizando o parsing e o envio dos dados no backend em conformidade com as APIs públicas do VagaSync e através da integração segura profissional. Ele evita qualquer atividade de scraping abusivo ou invasivo.</p>
+                </details>
+                <details>
+                  <summary>Existe alguma taxa sobre contratações?</summary>
+                  <p>Não cobramos comissão ou taxa de sucesso sobre contratações. As empresas pagam apenas a mensalidade fixa descrita no plano Recrutador Pro ou a taxa individual para impulsionar vagas específicas.</p>
+                </details>
+                <details>
+                  <summary>Quais são as formas de pagamento disponíveis?</summary>
+                  <p>Aceitamos pagamentos reais e imediatos via Pix com Mercado Pago ou Cartão de Crédito recorrente através da Stripe segura. Todo o tráfego de dados financeiros é criptografado.</p>
+                </details>
+              </div>
+            </section>
+          </div>
+
+          <!-- TAB: COMO FUNCIONA -->
+          <div v-else-if="landingActiveTab === 'como-funciona'" class="landing-panel landing-panel--wide">
+            <div class="landing-section__intro">
+              <h2 class="section-title">A Tecnologia por trás do VagaSync</h2>
+              <p class="section-subtitle">Descubra como nossa arquitetura inteligente conecta profissionais e corporações usando processamento de linguagem natural e automação.</p>
+            </div>
+            <div class="landing-feature-list">
+              <article class="landing-feature-item">
+                <div class="landing-feature-icon landing-feature-icon--cyan"><i class="fa-solid fa-robot"></i></div>
+                <div class="landing-feature-copy">
+                  <h3>1. Parsing e Classificação Cognitiva</h3>
+                  <p>Assim que você insere ou carrega seu currículo no formato PDF ou Word, o VagaSync aciona nossa camada integrada com o modelo Gemini Pro. Ele analisa semanticamente todas as suas experiências profissionais anteriores, habilidades técnicas, competências interpessoais e certificações, estruturando-as em tokens catalogados.</p>
+                </div>
+              </article>
+              <article class="landing-feature-item">
+                <div class="landing-feature-icon landing-feature-icon--blue"><i class="fa-solid fa-magnifying-glass"></i></div>
+                <div class="landing-feature-copy">
+                  <h3>2. Varredura e Indexação Multicanal</h3>
+                  <p>Nosso motor de busca percorre dezenas de fontes de vagas da web, cruzando dados geográficos e de palavras-chave. As vagas encontradas passam por uma limpeza inteligente e são indexadas no nosso banco de dados local, prontas para triagem.</p>
+                </div>
+              </article>
+              <article class="landing-feature-item">
+                <div class="landing-feature-icon landing-feature-icon--green"><i class="fa-solid fa-share-nodes"></i></div>
+                <div class="landing-feature-copy">
+                  <h3>3. Envio e Candidatura Automatizada</h3>
+                  <p>Para as vagas que você aprova ou configura para candidatura automática, o VagaSync preenche as fichas cadastrais necessárias e anexa o arquivo do seu currículo. Você acompanha o status em tempo real pelo seu painel administrativo.</p>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <!-- TAB: QUEM SOMOS -->
+          <div v-else-if="landingActiveTab === 'quem-somos'" class="landing-panel landing-panel--narrow">
+            <h2 class="section-title">Nossa Missão</h2>
+            <div class="content-card">
+              <p>O <strong>VagaSync</strong> nasceu de uma frustração comum: o tempo gasto preenchendo centenas de formulários repetitivos de emprego em portais legados e a dificuldade dos recrutadores de triar perfis técnicos de forma ágil e justa.</p>
+              <p>Nossa missão é usar a inteligência artificial para aproximar talentos e oportunidades reais, cortando processos repetitivos e gerando matches baseados em competências reais, não apenas em formatações de currículo.</p>
+              <p>Operando globalmente a partir do Brasil, oferecemos infraestrutura robusta, em conformidade com as diretrizes da LGPD, garantindo total privacidade e controle dos seus dados profissionais.</p>
+            </div>
+            <div class="landing-stat-grid landing-stat-grid--compact">
+              <div class="info-card">
+                <div class="info-card__label">Transparência</div>
+                <div class="info-card__value">Matches reais fundamentados</div>
+              </div>
+              <div class="info-card">
+                <div class="info-card__label">Segurança</div>
+                <div class="info-card__value">Conformidade total com LGPD</div>
+              </div>
+              <div class="info-card">
+                <div class="info-card__label">Eficácia</div>
+                <div class="info-card__value">Até 90% menos tempo gasto</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: PLANOS -->
+          <div v-else-if="landingActiveTab === 'planos'" class="landing-panel">
+            <h2 class="section-title">Investimento na sua Carreira</h2>
+            <p class="section-subtitle">Planos simples e transparentes. Sem taxas de cancelamento ou surpresas.</p>
+            <div class="plan-grid">
+              <div class="plan-card">
+                <div>
+                  <h3 class="plan-card__title">Candidato Básico</h3>
+                  <div class="plan-card__price">R$ 0 <span>/ gratuito</span></div>
+                  <ul class="plan-features">
+                    <li><i class="fa-solid fa-check"></i> Busca de vagas inteligente</li>
+                    <li><i class="fa-solid fa-check"></i> Limite de 5 candidaturas/dia</li>
+                    <li><i class="fa-solid fa-check"></i> Análise de match simplificada</li>
+                    <li class="plan-feature--muted"><i class="fa-solid fa-xmark"></i> Sem candidaturas automatizadas</li>
+                    <li class="plan-feature--muted"><i class="fa-solid fa-xmark"></i> Sem treino de entrevista premium</li>
+                  </ul>
+                </div>
+                <button @click="showAuthCard = true; authForm.role = 'candidate'; authMode = 'signup'" class="btn btn-secondary plan-card__button">Criar Conta Grátis</button>
+              </div>
+              <div class="plan-card plan-card--featured">
+                <div class="plan-card__badge">Recomendado</div>
+                <div>
+                  <h3 class="plan-card__title plan-card__title--featured">Candidato Premium</h3>
+                  <div class="plan-card__price plan-card__price--featured">R$ 9,90 <span>/ mês</span></div>
+                  <ul class="plan-features">
+                    <li><i class="fa-solid fa-check"></i> <strong>Candidaturas Automatizadas Ilimitadas</strong></li>
+                    <li><i class="fa-solid fa-check"></i> Otimizador de currículo avançado por IA</li>
+                    <li><i class="fa-solid fa-check"></i> <strong>Treino de Entrevistas Ilimitado</strong></li>
+                    <li><i class="fa-solid fa-check"></i> Alertas imediatos via WhatsApp</li>
+                    <li><i class="fa-solid fa-check"></i> Suporte prioritário via tickets</li>
+                  </ul>
+                </div>
+                <button @click="isLoggedIn ? handleCreateStripeCheckout('candidate_premium') : (showAuthCard = true, authForm.role = 'candidate')" class="btn btn-primary plan-card__button">{{ isLoggedIn ? 'Assinar Agora' : 'Cadastrar e Assinar' }}</button>
+              </div>
+              <div class="plan-card">
+                <div>
+                  <h3 class="plan-card__title plan-card__title--blue">Recrutador Pro</h3>
+                  <div class="plan-card__price">R$ 49,90 <span>/ mês</span></div>
+                  <ul class="plan-features">
+                    <li><i class="fa-solid fa-check"></i> Publicação de vagas ilimitada</li>
+                    <li><i class="fa-solid fa-check"></i> <strong>Triagem e Prescreening Cognitivo por IA</strong></li>
+                    <li><i class="fa-solid fa-check"></i> Gerador de Avaliações Técnicas ilimitado</li>
+                    <li><i class="fa-solid fa-check"></i> Chat direto com candidatos</li>
+                    <li><i class="fa-solid fa-check"></i> Painel ATS de contratações completo</li>
+                  </ul>
+                </div>
+                <button @click="isLoggedIn ? handleCreateStripeCheckout('recruiter_pro') : (showAuthCard = true, authForm.role = 'recruiter')" class="btn btn-primary plan-card__button">{{ isLoggedIn ? 'Assinar Agora' : 'Cadastrar e Assinar' }}</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: BLOG -->
+          <div v-else-if="landingActiveTab === 'blog'" class="landing-panel">
+            <div v-if="selectedBlogPost" class="content-card content-card--wide">
+              <button @click="selectedBlogPost = null" class="btn btn-secondary btn-pill btn-pill--ghost">
+                <i class="fa-solid fa-arrow-left"></i> Voltar ao Blog
+              </button>
+              <div class="blog-meta">Categoria: {{ selectedBlogPost.category || 'Mercado' }}</div>
+              <h1 class="blog-title">{{ selectedBlogPost.title }}</h1>
+              <div class="blog-details">
+                <span><i class="fa-solid fa-calendar"></i> {{ new Date(selectedBlogPost.created_at).toLocaleDateString('pt-BR') }}</span>
+                <span>•</span>
+                <span><i class="fa-solid fa-user"></i> Autor: Equipe VagaSync</span>
+              </div>
+              <article class="blog-article">{{ selectedBlogPost.content }}</article>
+              <div style="display:none;" v-html="'<script type=\'application/ld+json\'>' + JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'TechArticle',
+                'headline': selectedBlogPost.title,
+                'datePublished': selectedBlogPost.created_at,
+                'author': { '@type': 'Organization', 'name': 'VagaSync' },
+                'description': selectedBlogPost.summary || 'Dicas profissionais de carreira no VagaSync.'
+              }) + '</script>'"></div>
+            </div>
+            <div v-else>
+              <h2 class="section-title">Blog da Carreira</h2>
+              <p class="section-subtitle">Dicas de recolocação profissional, currículos e inovação com IA.</p>
+              <div class="blog-category-filters">
+                <button 
+                  v-for="cat in ['Todos', 'Mercado de Trabalho', 'Recrutamento & RH', 'Tecnologia', 'IA & Carreira']" 
+                  :key="cat"
+                  @click="selectedBlogCategory = cat"
+                  :class="['pill-button', { 'pill-button--active': selectedBlogCategory === cat }]"
+                >
+                  {{ cat }}
+                </button>
+              </div>
+              <div class="blog-grid">
+                <div 
+                  v-for="post in (blogPosts || []).filter(p => selectedBlogCategory === 'Todos' || p.category === selectedBlogCategory)" 
+                  :key="post.id"
+                  class="blog-card"
+                  @click="selectedBlogPost = post; window.history.pushState({}, '', `/blog/${post.id}-${post.slug || 'post'}`)"
+                >
+                  <div>
+                    <span class="blog-card__category">{{ post.category || 'Mercado' }}</span>
+                    <h3 class="blog-card__title">{{ post.title }}</h3>
+                    <p class="blog-card__excerpt">{{ post.summary || post.content.substring(0, 100) }}...</p>
+                  </div>
+                  <div class="blog-card__footer">
+                    <span>{{ new Date(post.created_at).toLocaleDateString('pt-BR') }}</span>
+                    <span class="blog-card__readmore">Ler Mais <i class="fa-solid fa-arrow-right"></i></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: CONTATO -->
+          <div v-else-if="landingActiveTab === 'contato'" class="landing-panel landing-panel--narrow">
+            <h2 class="section-title">Fale Conosco</h2>
+            <p class="section-subtitle">Envie suas dúvidas, sugestões ou feedbacks para nossa equipe comercial.</p>
+            <div class="content-card">
+              <form @submit.prevent="showToast('Mensagem Enviada!', 'Nossa equipe responderá em até 24 horas úteis.', 'success')">
+                <div class="form-group">
+                  <label>Seu Nome Completo</label>
+                  <input type="text" required class="form-input" placeholder="Ex: Maria Souza" />
+                </div>
+                <div class="form-group">
+                  <label>E-mail de Resposta</label>
+                  <input type="email" required class="form-input" placeholder="Ex: maria@email.com" />
+                </div>
+                <div class="form-group">
+                  <label>Assunto</label>
+                  <input type="text" required class="form-input" placeholder="Ex: Dúvidas sobre o plano Premium" />
+                </div>
+                <div class="form-group">
+                  <label>Mensagem</label>
+                  <textarea required class="form-input form-input--textarea" rows="5" placeholder="Escreva sua mensagem detalhada..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Enviar Mensagem</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- TAB: PRIVACIDADE -->
+          <div v-else-if="landingActiveTab === 'privacidade'" class="landing-panel landing-panel--narrow">
+            <h2 class="section-title">Política de Privacidade</h2>
+            <div class="content-card">
+              <p>O VagaSync assume o compromisso público de respeitar a sua privacidade e garantir a segurança das suas informações de currículo, LinkedIn e pagamentos.</p>
+              <h3>1. Coleta e Uso de Dados</h3>
+              <p>Os dados profissionais que você carrega (como textos de currículo) são processados de forma isolada pelas APIs do modelo Gemini Pro para gerar relatórios de compatibilidade. Não armazenamos seus arquivos originais nem vendemos informações pessoais para fins publicitários sem consentimento.</p>
+              <h3>2. Cookies e Rastreamento</h3>
+              <p>Utilizamos cookies estritamente necessários para manter sua sessão ativa e cookies de analytics (Google Analytics) para compreender o tráfego do site, condicionada à aceitação explícita no nosso banner de consentimento.</p>
+            </div>
+          </div>
+
+          <!-- TAB: TERMOS -->
+          <div v-else-if="landingActiveTab === 'termos'" class="landing-panel landing-panel--narrow">
+            <h2 class="section-title">Termos de Uso</h2>
+            <div class="content-card">
+              <p>Ao se cadastrar no VagaSync, você declara estar ciente e concordar com os presentes Termos de Uso.</p>
+              <h3>1. Uso Aceitável</h3>
+              <p>O VagaSync é uma ferramenta de auxílio de busca de emprego e contratação. Qualquer tentativa de usar o robô de candidaturas ou a IA para envio de spans, fraudes corporativas ou engenharia reversa do código é terminantemente proibida e resultará na exclusão imediata da conta sem direito a reembolsos.</p>
+              <h3>2. Reembolsos e Cobranças</h3>
+              <p>Os pagamentos são processados com total segurança e as assinaturas podem ser canceladas a qualquer momento diretamente pela área de faturamento no painel.</p>
+            </div>
+          </div>
+
+          <!-- TAB: LGPD -->
+          <div v-else-if="landingActiveTab === 'lgpd'" class="landing-panel landing-panel--narrow">
+            <h2 class="section-title">Declaração de Conformidade LGPD</h2>
+            <div class="content-card">
+              <p>O VagaSync opera em estrita conformidade com a <strong>Lei Geral de Proteção de Dados (Lei nº 13.709/2018)</strong> brasileira.</p>
+              <h3>Seus Direitos Garantidos</h3>
+              <p>Oferecemos a você controle absoluto sobre suas informações. Através das abas de privacidade dentro das suas configurações ou solicitando pelo suporte, você tem direito a:</p>
+              <ul class="info-list">
+                <li>Confirmar a existência de tratamento de dados e acessar seus dados cadastrados.</li>
+                <li>Corrigir dados incompletos, inexatos ou desatualizados.</li>
+                <li><strong>Direito ao Esquecimento:</strong> Solicitar a deleção completa de sua conta e a eliminação de todos os registros armazenados no banco de dados.</li>
+                <li>Exportar seus dados profissionais em formato JSON legível.</li>
+              </ul>
+            </div>
+          </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="landing-footer">
+          <div class="landing-footer__top">
+            <div>
+              <div class="landing-footer__brand">
+                <img src="/vagasync_logo.png?v=6" alt="VagaSync" class="landing-footer__logo" />
+                <span class="landing-footer__title">VagaSync</span>
+              </div>
+              <p class="landing-footer__description">O copiloto de carreira definitivo que automatiza buscas e triagens cognitivas usando inteligência artificial real.</p>
+            </div>
+            <div>
+              <h4 class="landing-footer__heading">Navegação</h4>
+              <ul class="landing-footer__links">
+                <li @click="navigateLanding('como-funciona')">Como Funciona</li>
+                <li @click="navigateLanding('quem-somos')">Quem Somos</li>
+                <li @click="navigateLanding('planos')">Planos & Preços</li>
+                <li @click="navigateLanding('blog')">Blog da Carreira</li>
+              </ul>
+            </div>
+            <div>
+              <h4 class="landing-footer__heading">Legal</h4>
+              <ul class="landing-footer__links">
+                <li @click="navigateLanding('privacidade')">Privacidade</li>
+                <li @click="navigateLanding('termos')">Termos de Uso</li>
+                <li @click="navigateLanding('lgpd')">Conformidade LGPD</li>
+              </ul>
+            </div>
+            <div>
+              <h4 class="landing-footer__heading">Receber Novidades</h4>
+              <p class="landing-footer__description">Inscreva-se na nossa newsletter de dicas de recolocação por e-mail.</p>
+              <div class="landing-footer__newsletter">
+                <input 
+                  type="email" 
+                  class="form-input" 
+                  v-model="newsletterEmail" 
+                  placeholder="Seu e-mail profissional" 
+                />
+                <button @click="handleSubscribeNewsletter" class="btn btn-primary btn-newsletter">Assinar</button>
+              </div>
+            </div>
+          </div>
+          <div class="landing-footer__bottom">
+            <span>&copy; 2026 VagaSync S.A. Todos os direitos reservados. CNPJ: 45.289.102/0001-90.</span>
+            <div class="landing-footer__social">
+              <a href="https://linkedin.com" target="_blank"><i class="fa-brands fa-linkedin"></i></a>
+              <a href="https://github.com" target="_blank"><i class="fa-brands fa-github"></i></a>
+              <a href="https://youtube.com" target="_blank"><i class="fa-brands fa-youtube"></i></a>
+            </div>
+          </div>
+        </footer>
+      </div>
     </template>
 
     <!-- Main Logged In Application Dashboard -->
@@ -6015,6 +6760,92 @@ const restoreCandidate = () => {
                   </div>
                   <button class="btn btn-secondary" style="color: var(--color-error); padding: 0.25rem 0.5rem; font-size: 0.75rem;" @click="handleDeleteBanner(b.id)">
                     Excluir
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- MÓDULO DE MARKETING VIRAL COM IA -->
+            <div class="glass-card" style="border-color: rgba(0, 242, 254, 0.25);">
+              <h3 class="section-title" style="color: #00f2fe;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="color: #00f2fe;"></i> Módulo de Marketing Viral com IA
+              </h3>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+                Crie roteiros para Reels/TikTok, copies virais do LinkedIn, Threads do Twitter ou carrosséis voltados para atração orgânica em massa.
+              </p>
+              
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="form-group" style="margin: 0;">
+                  <label>Plataforma / Canal de Postagem</label>
+                  <select class="form-input" v-model="viralConfig.platform" style="background: #060913; color: #fff;">
+                    <option value="reels_tiktok">🎥 Reels / TikTok (Roteiro e Cenas)</option>
+                    <option value="linkedin">💼 LinkedIn (Copy de Alto Impacto)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label>Público-Alvo da Campanha</label>
+                  <select class="form-input" v-model="viralConfig.target_audience" style="background: #060913; color: #fff;">
+                    <option value="candidatos_ti">💻 Programadores & Candidatos de TI</option>
+                    <option value="jovem_aprendiz">🎓 Jovem Aprendiz / Estagiários</option>
+                    <option value="rh_recrutadores">👥 RH & Recrutadores (B2B)</option>
+                    <option value="transicao_carreira">🔄 Profissionais em Transição</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button 
+                class="btn btn-primary" 
+                style="background: linear-gradient(135deg, #00f2fe, #3b82f6); color: #060913; font-weight: 700; width: 100%; border: none;"
+                @click="generateViralContent"
+                :disabled="isLoadingViral"
+              >
+                <span v-if="isLoadingViral"><i class="fa-solid fa-circle-notch fa-spin"></i> Gerando Ideias Virais...</span>
+                <span v-else><i class="fa-solid fa-wand-magic-sparkles"></i> Gerar Conteúdo Viral com IA</span>
+              </button>
+              
+              <!-- Resultado da Geração -->
+              <div v-if="viralResult" style="margin-top: 1.5rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; animation: slideUp 0.3s ease;">
+                <div>
+                  <strong style="color: #00f2fe; font-size: 0.8rem; text-transform: uppercase;">🪝 Gancho Inicial (3s):</strong>
+                  <div style="font-size: 0.95rem; color: #fff; font-weight: 700; margin-top: 0.25rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                    "{{ viralResult.hook }}"
+                  </div>
+                </div>
+                
+                <div>
+                  <strong style="color: #00f2fe; font-size: 0.8rem; text-transform: uppercase;">📝 Roteiro / Conteúdo Copiável:</strong>
+                  <div style="font-size: 0.88rem; color: var(--text-primary); margin-top: 0.25rem; line-height: 1.6; white-space: pre-wrap; padding: 0.75rem; background: rgba(0,0,0,0.4); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); font-family: monospace;">{{ viralResult.script_or_copy }}</div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                  <div>
+                    <strong style="color: #00f2fe; font-size: 0.8rem; text-transform: uppercase;">⚡ Gatilho de Comentário:</strong>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.25rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                      {{ viralResult.engagement_trigger }}
+                    </div>
+                  </div>
+                  <div>
+                    <strong style="color: #00f2fe; font-size: 0.8rem; text-transform: uppercase;">🏷️ Hashtags Sugeridas:</strong>
+                    <div style="font-size: 0.82rem; color: #3b82f6; font-weight: 600; margin-top: 0.25rem; padding: 0.5rem; background: rgba(255,255,255,0.02); border-radius: 6px;">
+                      {{ viralResult.hashtags }}
+                    </div>
+                  </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                  <button 
+                    class="btn btn-secondary" 
+                    style="flex: 1; font-size: 0.8rem; border-color: rgba(255,255,255,0.15);"
+                    @click="copyToClipboard(viralResult.script_or_copy)"
+                  >
+                    <i class="fa-solid fa-copy"></i> Copiar Conteúdo
+                  </button>
+                  <button 
+                    class="btn btn-secondary" 
+                    style="flex: 1; font-size: 0.8rem; border-color: rgba(0, 242, 254, 0.25); color: #00f2fe;"
+                    @click="viralResult = null"
+                  >
+                    Limpar
                   </button>
                 </div>
               </div>

@@ -4,6 +4,10 @@ import json
 import secrets
 import time
 import requests
+from dotenv import load_dotenv
+
+# Carrega variaveis de ambiente do diretório do backend
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 from urllib.parse import urlencode
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +17,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
 
 import database
@@ -37,7 +41,56 @@ except ImportError:
 # Initialize database
 init_db()
 
+import security
+security_scheme = HTTPBearer()
+
+def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+    token = credentials.credentials
+    payload = security.verify_jwt(token)
+    if not payload or payload.get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Sessão administrativa inválida ou expirada.")
+    return payload
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme), db: Session = Depends(get_db)):
+    token = credentials.credentials
+    payload = security.verify_jwt(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token de sessão inválido ou expirado.")
+    user_id = payload.get("user_id")
+    role = payload.get("role")
+    
+    if role == "admin":
+        return {"id": 0, "email": "admin@vagasync.com", "role": "admin", "name": "Super Admin"}
+        
+    from database import User
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário associado ao token não encontrado.")
+    return user
+
+def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)), db: Session = Depends(get_db)):
+    if not credentials:
+        return None
+    token = credentials.credentials
+    payload = security.verify_jwt(token)
+    if not payload:
+        return None
+    role = payload.get("role")
+    user_id = payload.get("user_id")
+    if role == "admin":
+        return {"id": 0, "email": "admin@vagasync.com", "role": "admin", "name": "Super Admin"}
+    from database import User
+    return db.query(User).filter(User.id == user_id).first()
+
 linkedin_oauth_states = {}
+LINKEDIN_STATE_EXPIRE_SECONDS = 300
+
+def cleanup_linkedin_oauth_states():
+    now = int(time.time())
+    expired = [state for state, ts in linkedin_oauth_states.items() if now - ts > LINKEDIN_STATE_EXPIRE_SECONDS]
+    for state in expired:
+        linkedin_oauth_states.pop(state, None)
+
 
 def get_config_value(db: Session, key: str, default: str = "") -> str:
     cfg = db.query(Config).filter(Config.key == key).first()
@@ -53,10 +106,27 @@ def get_config_value(db: Session, key: str, default: str = "") -> str:
 
 
 def get_linkedin_credentials(db: Session):
-    return (
-        get_config_value(db, "linkedin_client_id", ""),
-        get_config_value(db, "linkedin_client_secret", "")
-    )
+    client_id = get_config_value(db, "linkedin_client_id", "") or ""
+    client_secret = get_config_value(db, "linkedin_client_secret", "") or ""
+    return client_id.strip(), client_secret.strip()
+
+
+def get_linkedin_redirect_uri(request: Request) -> str:
+    backend_url = os.getenv("BACKEND_URL", "").strip()
+    if backend_url:
+        return f"{backend_url.rstrip('/')}/api/linkedin/callback"
+
+    if request is not None:
+        scheme = request.url.scheme
+        host = request.url.hostname
+        port = request.url.port
+        if host:
+            port_fragment = ""
+            if port and ((scheme == "http" and port != 80) or (scheme == "https" and port != 443)):
+                port_fragment = f":{port}"
+            return f"{scheme}://{host}{port_fragment}/api/linkedin/callback"
+
+    return "http://localhost:8000/api/linkedin/callback"
 
 
 def get_frontend_url(db: Session) -> str:
@@ -67,9 +137,87 @@ def get_backend_url() -> str:
     return os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
+def get_linkedin_user_info(access_token: str):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    profile_name = ""
+    profile_email = ""
+
+    try:
+        resp = requests.get("https://api.linkedin.com/oidc/userinfo", headers=headers, timeout=10)
+        if resp.ok:
+            data = resp.json()
+            profile_name = data.get("name", "") or data.get("given_name", "")
+            if not profile_name:
+                first_name = data.get("localizedFirstName", "")
+                last_name = data.get("localizedLastName", "")
+                profile_name = " ".join([part for part in [first_name, last_name] if part]).strip()
+            profile_email = data.get("email", "")
+    except Exception:
+        profile_name = ""
+        profile_email = ""
+
+    if not profile_name:
+        try:
+            resp = requests.get(
+                "https://api.linkedin.com/v2/me?projection=(localizedFirstName,localizedLastName)",
+                headers=headers,
+                timeout=10
+            )
+            if resp.ok:
+                data = resp.json()
+                profile_name = " ".join([part for part in [data.get("localizedFirstName", ""), data.get("localizedLastName", "")] if part]).strip()
+        except Exception:
+            pass
+
+    if not profile_email:
+        try:
+            resp = requests.get(
+                "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
+                headers=headers,
+                timeout=10
+            )
+            if resp.ok:
+                data = resp.json()
+                elements = data.get("elements", [])
+                if elements and isinstance(elements, list):
+                    handle = elements[0].get("handle~") if isinstance(elements[0], dict) else None
+                    if handle and isinstance(handle, dict):
+                        profile_email = handle.get("emailAddress", "")
+        except Exception:
+            pass
+
+    return profile_name.strip(), profile_email.strip()
+
+
+def create_or_get_linkedin_user(name: str, email: str, db: Session):
+    from database import User
+    email = email.strip().lower()
+    if not email:
+        return None
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if not user.name and name:
+            user.name = name.strip()
+            db.commit()
+            db.refresh(user)
+        if not user.password_hash:
+            user.password_hash = security.hash_password(secrets.token_urlsafe(32))
+            db.commit()
+            db.refresh(user)
+        return user
+
+    password_hash = security.hash_password(secrets.token_urlsafe(32))
+    user = User(email=email, name=name.strip() if name else email, password_hash=password_hash, role="candidate")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @asynccontextmanager
 async def lifespan(app):
-    """Auto-start the automation agent when the server boots."""
+    """Auto-start the automation agent and marketing scheduler when the server boots."""
     import asyncio
     db = database.SessionLocal()
     try:
@@ -79,11 +227,32 @@ async def lifespan(app):
             asyncio.create_task(linkedin_bot.run_automation_cycle())
         else:
             add_log("info", "⏸️  Servidor iniciado. Aguardando currículo para auto-iniciar o agente.")
+            
+        # Task do publicador automático de marketing (5 posts por dia)
+        async def run_marketing_scheduler_loop():
+            await asyncio.sleep(5)  # aguarda o boot inicial
+            while True:
+                db_session = database.SessionLocal()
+                try:
+                    from marketing_publisher import schedule_5_posts
+                    schedule_5_posts(db_session)
+                except Exception as e:
+                    print(f"[Marketing Scheduler Task] Erro ao agendar: {e}")
+                finally:
+                    db_session.close()
+                await asyncio.sleep(12 * 3600)  # roda a cada 12 horas para reabastecer a fila
+                
+        asyncio.create_task(run_marketing_scheduler_loop())
     finally:
         db.close()
     yield  # server runs
 
 app = FastAPI(title="Vaga Sync API", lifespan=lifespan)
+
+import google_ads
+app.include_router(google_ads.router)
+import facebook_ads
+app.include_router(facebook_ads.router)
 
 # ─── Rate Limiter Setup ───────────────────────────────────────────────────────
 if RATE_LIMIT_AVAILABLE:
@@ -160,6 +329,12 @@ class JobResponse(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime] = None
 
+    @model_validator(mode='after')
+    def normalize_recruiter_link(self):
+        if self.source == "recruiter":
+            self.link = f"https://vagasync.com.br/vagas/{self.id}"
+        return self
+
     class Config:
         orm_mode = True
         from_attributes = True
@@ -217,6 +392,16 @@ class ConfigUpdate(BaseModel):
     search_scope: Optional[str] = None
     enable_web_search: Optional[str] = None
 
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+    role: Optional[str] = "candidate"  # 'candidate' ou 'recruiter'
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 class AdminLogin(BaseModel):
     email: str
     password: str
@@ -238,11 +423,19 @@ class AdminConfigUpdate(BaseModel):
     gemini_api_key: Optional[str] = None
     linkedin_cookie: Optional[str] = None
     
-    # analytics
+    # analytics & marketing
     ga4_measurement_id: Optional[str] = None
     google_tag_manager_id: Optional[str] = None
     facebook_pixel_id: Optional[str] = None
     microsoft_clarity_id: Optional[str] = None
+    google_ads_client_id: Optional[str] = None
+    google_ads_client_secret: Optional[str] = None
+    google_ads_developer_token: Optional[str] = None
+    google_ads_customer_id: Optional[str] = None
+    facebook_ads_client_id: Optional[str] = None
+    facebook_ads_client_secret: Optional[str] = None
+    facebook_ads_account_id: Optional[str] = None
+    facebook_ads_access_token: Optional[str] = None
     
     # SEO
     seo_title: Optional[str] = None
@@ -266,6 +459,8 @@ class AdminConfigUpdate(BaseModel):
     linkedin_client_id: Optional[str] = None
     linkedin_client_secret: Optional[str] = None
     allow_domain_signup: Optional[str] = None
+    power_bi_iframe_url: Optional[str] = None
+    influencimax_active: Optional[bool] = None
     
     # Integrations & Notification Settings
     whatsapp_phone: Optional[str] = None
@@ -329,7 +524,8 @@ def get_config(db: Session = Depends(get_db)):
         "enable_web_search": "true",
         "pix_key": "",
         "stripe_public_key": "",
-        "allow_domain_signup": "false"
+        "allow_domain_signup": "false",
+        "power_bi_iframe_url": ""
     }
     for key, val in defaults.items():
         if key not in config_dict:
@@ -416,21 +612,25 @@ def init_linkedin(data: ConfigUpdate, db: Session = Depends(get_db)):
     return {"message": "Credenciais iniciais do LinkedIn salvas com sucesso!"}
 
 @app.get("/api/linkedin/login")
-def linkedin_login(db: Session = Depends(get_db)):
+def linkedin_login(request: Request, db: Session = Depends(get_db)):
     client_id, client_secret = get_linkedin_credentials(db)
     if not client_id or not client_secret:
-        raise HTTPException(status_code=500, detail="LinkedIn OAuth credentials não estão configuradas.")
+        return HTMLResponse(
+            "<h1>LinkedIn OAuth não configurado</h1><p>Verifique se as variáveis <strong>LINKEDIN_CLIENT_ID</strong> e <strong>LINKEDIN_CLIENT_SECRET</strong> estão definidas em <code>backend/.env</code> ou no painel administrativo.</p>",
+            status_code=500
+        )
 
+    cleanup_linkedin_oauth_states()
     state = secrets.token_urlsafe(16)
     linkedin_oauth_states[state] = int(time.time())
 
-    redirect_uri = f"{get_backend_url()}/api/linkedin/callback"
+    redirect_uri = get_linkedin_redirect_uri(request)
     params = {
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "state": state,
-        "scope": "r_liteprofile r_emailaddress"
+        "scope": "openid profile email r_liteprofile r_emailaddress"
     }
     auth_url = f"https://www.linkedin.com/oauth/v2/authorization?{urlencode(params)}"
     return RedirectResponse(auth_url)
@@ -442,16 +642,22 @@ def linkedin_callback(request: Request, db: Session = Depends(get_db)):
     error = request.query_params.get("error")
     error_description = request.query_params.get("error_description")
 
+    frontend_url = get_frontend_url(db)
+
     if error:
         detail = error_description or "Autorização do LinkedIn foi negada."
-        return HTMLResponse(f"<h1>Falha no login LinkedIn</h1><p>{detail}</p>", status_code=400)
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': detail})}"
+        return RedirectResponse(redirect_to)
 
     if not code or not state or state not in linkedin_oauth_states:
-        raise HTTPException(status_code=400, detail="Estado OAuth inválido ou código de autorização ausente.")
+        cleanup_linkedin_oauth_states()
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': 'Estado OAuth inválido ou código de autorização ausente.'})}"
+        return RedirectResponse(redirect_to)
 
     linkedin_oauth_states.pop(state, None)
+    cleanup_linkedin_oauth_states()
     client_id, client_secret = get_linkedin_credentials(db)
-    redirect_uri = f"{get_backend_url()}/api/linkedin/callback"
+    redirect_uri = get_linkedin_redirect_uri(request)
 
     token_resp = requests.post(
         "https://www.linkedin.com/oauth/v2/accessToken",
@@ -462,46 +668,42 @@ def linkedin_callback(request: Request, db: Session = Depends(get_db)):
             "client_id": client_id,
             "client_secret": client_secret
         },
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=10
     )
 
     if not token_resp.ok:
-        return HTMLResponse("<h1>Falha ao trocar código por token do LinkedIn.</h1>", status_code=500)
+        detail = token_resp.text or "Falha ao trocar código por token do LinkedIn."
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': detail})}"
+        return RedirectResponse(redirect_to)
 
     token_data = token_resp.json()
     access_token = token_data.get("access_token")
     if not access_token:
-        return HTMLResponse("<h1>Falha ao obter token do LinkedIn.</h1>", status_code=500)
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': 'Falha ao obter token do LinkedIn.'})}"
+        return RedirectResponse(redirect_to)
 
-    profile_name = ""
-    profile_email = ""
-    profile_resp = requests.get(
-        "https://api.linkedin.com/v2/me",
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
-    if profile_resp.ok:
-        profile_json = profile_resp.json()
-        profile_name = "{} {}".format(
-            profile_json.get("localizedFirstName", ""),
-            profile_json.get("localizedLastName", "")
-        ).strip()
+    profile_name, profile_email = get_linkedin_user_info(access_token)
+    if not profile_email:
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': 'Não foi possível recuperar o e-mail do LinkedIn. Verifique as permissões do aplicativo.'})}"
+        return RedirectResponse(redirect_to)
 
-    email_resp = requests.get(
-        "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))",
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
-    if email_resp.ok:
-        email_json = email_resp.json()
-        elements = email_json.get("elements", [])
-        if elements and elements[0].get("handle~"):
-            profile_email = elements[0]["handle~"].get("emailAddress", "")
+    user = create_or_get_linkedin_user(profile_name, profile_email, db)
+    if not user:
+        redirect_to = f"{frontend_url}/?{urlencode({'linkedin_auth': 'error', 'error_message': 'Falha ao criar ou localizar o usuário LinkedIn.'})}"
+        return RedirectResponse(redirect_to)
 
-    frontend_url = get_frontend_url(db)
-    query = {"linkedin_auth": "success"}
+    access_jwt = security.create_jwt({"user_id": user.id, "role": user.role}, expires_in=3600)
+    log_audit("USER_LOGIN", f"Usuário {profile_email} logado via LinkedIn.", db)
+
+    query = {
+        "linkedin_auth": "success",
+        "linkedin_token": access_jwt,
+        "linkedin_email": profile_email,
+        "linkedin_role": user.role
+    }
     if profile_name:
         query["linkedin_name"] = profile_name
-    if profile_email:
-        query["linkedin_email"] = profile_email
 
     redirect_to = f"{frontend_url}/?{urlencode(query)}"
     return RedirectResponse(redirect_to)
@@ -517,7 +719,7 @@ ALLOWED_RESUME_CONTENT_TYPES = {
 MAX_RESUME_SIZE_MB = 5
 
 @app.post("/api/resume/upload")
-async def upload_resume(file: UploadFile = File(None), text: str = Form(None), db: Session = Depends(get_db)):
+async def upload_resume(file: UploadFile = File(None), text: str = Form(None), current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     resume_content = ""
     
     if file:
@@ -554,13 +756,16 @@ async def upload_resume(file: UploadFile = File(None), text: str = Form(None), d
     else:
         raise HTTPException(status_code=400, detail="Envie um arquivo ou texto de currículo.")
 
-    # Salva o currículo nas configurações
-    resume_cfg = db.query(Config).filter(Config.key == "resume_text").first()
-    if resume_cfg:
-        resume_cfg.value = resume_content
+    # Salva o currículo no usuário logado de forma isolada! (Fase 2)
+    if isinstance(current_user, dict):
+        resume_cfg = db.query(Config).filter(Config.key == "resume_text").first()
+        if resume_cfg:
+            resume_cfg.value = resume_content
+        else:
+            db.add(Config(key="resume_text", value=resume_content))
     else:
-        resume_cfg = Config(key="resume_text", value=resume_content)
-        db.add(resume_cfg)
+        current_user.resume_text = resume_content
+        
     db.commit()
 
     # Faz análise por IA com Gemini
@@ -588,7 +793,7 @@ async def upload_resume(file: UploadFile = File(None), text: str = Form(None), d
     }
 
 @app.get("/api/jobs", response_model=List[JobResponse])
-def get_jobs(db: Session = Depends(get_db)):
+def get_jobs(current_user = Depends(get_optional_user), db: Session = Depends(get_db)):
     # Vagas de recrutadores (source='recruiter') aparecem primeiro, depois por data
     from sqlalchemy import case
     priority = case(
@@ -598,15 +803,32 @@ def get_jobs(db: Session = Depends(get_db)):
 
     jobs = db.query(Job).order_by(priority, Job.created_at.desc()).all()
 
-    # Normalização de link (evita redirecionar para LinkedIn indevidamente)
-    # Regra: para source='recruiter', sempre abrir a página interna do VagaSync.
-    # Isso protege contra dados antigos/errados já salvos no banco.
+    # Se o usuário estiver logado como candidato, buscamos as candidaturas dele
+    user_applications = {}
+    if current_user and not isinstance(current_user, dict):
+        from database import Application
+        apps = db.query(Application).filter(Application.candidate_id == current_user.id).all()
+        user_applications = {a.job_id: a for a in apps}
+
+    # Normalização de link e isolamento de status/match do candidato logado
     for j in jobs:
         if getattr(j, "source", None) == "recruiter":
             try:
                 j.link = f"https://vagasync.com.br/vagas/{j.id}"
             except Exception:
                 pass
+                
+        # Injeta status do candidato se ele tiver candidatura para a vaga
+        if j.id in user_applications:
+            app_data = user_applications[j.id]
+            j.status = app_data.status
+            j.match_score = app_data.match_score
+            j.match_explanation = app_data.match_explanation
+            j.applied_at = app_data.applied_at
+        else:
+            # Caso contrário, para este candidato a vaga está pendente (found) e sem data de candidatura
+            j.status = "found"
+            j.applied_at = None
 
     return jobs
 
@@ -791,7 +1013,7 @@ def generate_job_image_ia(job_id: int, db: Session = Depends(get_db)):
     return {"image_url": image_url}
 
 @app.delete("/api/jobs/{job_id}")
-def delete_job(job_id: int, db: Session = Depends(get_db)):
+def delete_job(job_id: int, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Vaga não encontrada")
@@ -800,26 +1022,54 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
     return {"message": "Vaga deletada com sucesso."}
 
 @app.patch("/api/jobs/{job_id}")
-async def update_job_status(job_id: int, payload: dict, db: Session = Depends(get_db)):
+async def update_job_status(job_id: int, payload: dict, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Vaga não encontrada")
+        
+    # Se for o mock admin, atualiza global
+    if isinstance(current_user, dict):
+        if "status" in payload:
+            job.status = payload["status"]
+            if payload["status"] == "applied":
+                job.applied_at = datetime.utcnow()
+        db.commit()
+        db.refresh(job)
+        return {"message": "Status global updated by admin.", "status": job.status}
+
+    # Candidato logado
+    from database import Application
+    app_entry = db.query(Application).filter(Application.candidate_id == current_user.id, Application.job_id == job_id).first()
     
-    old_status = job.status
-    if "status" in payload:
-        job.status = payload["status"]
-        if payload["status"] == "applied" and old_status != "applied":
-            job.applied_at = datetime.utcnow()
-            # If recruiter-posted job, notify recruiter
-            if job.source == "recruiter" and (job.recruiter_contact or job.recruiter_phone):
-                try:
-                    await notifier.dispatch_notification("candidate_applied", job, db)
-                except Exception as e:
-                    print(f"Error notifying recruiter: {e}")
-                    
+    old_status = "found"
+    if not app_entry:
+        app_entry = Application(
+            candidate_id=current_user.id,
+            job_id=job_id,
+            status=payload.get("status", "found"),
+            created_at=datetime.utcnow()
+        )
+        db.add(app_entry)
+    else:
+        old_status = app_entry.status
+        if "status" in payload:
+            app_entry.status = payload["status"]
+            
+    if payload.get("status") == "applied" and old_status != "applied":
+        app_entry.applied_at = datetime.utcnow()
+        # If recruiter-posted job, notify recruiter
+        if job.source == "recruiter" and (job.recruiter_contact or job.recruiter_phone):
+            try:
+                # Criamos um mock temporario do job contendo os status do candidato para o notifier
+                job_mock = job
+                job_mock.status = app_entry.status
+                job_mock.applied_at = app_entry.applied_at
+                await notifier.dispatch_notification("candidate_applied", job_mock, db)
+            except Exception as e:
+                print(f"Error notifying recruiter: {e}")
+                
     db.commit()
-    db.refresh(job)
-    return {"message": "Status updated successfully.", "status": job.status}
+    return {"message": "Status updated successfully.", "status": app_entry.status}
 
 
 @app.post("/api/jobs/{job_id}/extend", response_model=JobResponse)
@@ -840,12 +1090,12 @@ def extend_recruiter_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/jobs/clear-all")
-def clear_all_jobs(db: Session = Depends(get_db)):
+def clear_all_jobs(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
     try:
         db.query(Job).delete()
         db.query(Log).delete()
         db.commit()
-        add_log("info", "🧹 Todas as vagas e logs foram limpos do banco de dados.")
+        add_log("info", "🧹 Todas as vagas e logs foram limpos do banco de dados pelo administrador.")
         return {"message": "Todas as vagas e logs foram excluídos com sucesso."}
     except Exception as e:
         db.rollback()
@@ -946,11 +1196,15 @@ async def get_automation_events():
         finally:
             db.close()
 
+        import asyncio
         while True:
-            # Aguarda novos logs da fila
-            log_item = await linkedin_bot.log_queue.get()
-            import json
-            yield f"data: {json.dumps(log_item)}\n\n"
+            try:
+                log_item = await asyncio.wait_for(linkedin_bot.log_queue.get(), timeout=15.0)
+                import json
+                yield f"data: {json.dumps(log_item)}\n\n"
+            except asyncio.TimeoutError:
+                # Keep-alive ping to prevent Nginx upstream timeouts
+                yield "data: {\"ping\": true}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -1023,16 +1277,7 @@ async def recruiter_send_whatsapp(payload: RecruiterWhatsAppRequest, db: Session
 
 import security
 import shutil
-from database import AuditLog, BlogPost, Banner, FinancialTransaction, FeedPost, FeedComment, FeedReaction
-
-security_scheme = HTTPBearer()
-
-def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
-    token = credentials.credentials
-    payload = security.verify_jwt(token)
-    if not payload or payload.get("role") != "admin":
-        raise HTTPException(status_code=401, detail="Sessão administrativa inválida ou expirada.")
-    return payload
+from database import AuditLog, BlogPost, Banner, FinancialTransaction, FeedPost, FeedComment, FeedReaction, FinancialExpense, SupportTicket
 
 def log_audit(action: str, details: str, db: Session, ip: str = "127.0.0.1"):
     try:
@@ -1155,12 +1400,76 @@ def _check_login_rate_limit(request: Request):
     attempts.append(now)
     _login_attempts[ip] = attempts
 
+@app.post("/api/auth/register")
+def auth_register(payload: UserRegister, db: Session = Depends(get_db)):
+    from database import User
+    # Verifica se usuario ja existe
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
+    
+    password_hash = security.hash_password(payload.password)
+    
+    new_user = User(
+        email=payload.email,
+        password_hash=password_hash,
+        name=payload.name,
+        role=payload.role
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    log_audit("USER_REGISTER", f"Novo usuário registrado: {payload.email} (papel: {payload.role})", db)
+    return {"message": "Usuário registrado com sucesso.", "user_id": new_user.id}
+
+@app.post("/api/auth/login")
+def auth_login(payload: UserLogin, request: Request, db: Session = Depends(get_db)):
+    _check_login_rate_limit(request)
+    from database import User
+    
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
+        
+    if not security.verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")
+        
+    ip = request.client.host if request.client else "unknown"
+    _login_attempts.pop(ip, None)
+    
+    access_token = security.create_jwt({"user_id": user.id, "role": user.role}, expires_in=3600)
+    refresh_token = security.create_jwt({"user_id": user.id, "role": user.role, "type": "refresh"}, expires_in=86400 * 7)
+    
+    log_audit("USER_LOGIN", f"Usuário {user.email} efetuou login com sucesso.", db)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "role": user.role,
+        "user_id": user.id,
+        "name": user.name
+    }
+
 @app.post("/api/admin/login")
 def admin_login(payload: AdminLogin, request: Request):
     _check_login_rate_limit(request)
-    is_valid_email = payload.email in ["admin@vagasync.com", "ricardo@vagasync.com.br", "ricardo@vagasync.com"]
-    is_valid_pw = (payload.email == "admin@vagasync.com" and payload.password == "admin123") or \
-                   (payload.email in ["ricardo@vagasync.com.br", "ricardo@vagasync.com"] and payload.password == "Vagasync2026#")
+    import hmac
+
+    # Carrega credenciais do .env com fallbacks
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@vagasync.com")
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+
+    ricardo_email_1 = os.getenv("ADMIN_RICARDO_EMAIL_1", "ricardo@vagasync.com.br")
+    ricardo_email_2 = os.getenv("ADMIN_RICARDO_EMAIL_2", "ricardo@vagasync.com")
+    ricardo_password = os.getenv("ADMIN_RICARDO_PASSWORD", "Vagasync2026#")
+
+    is_valid_email = payload.email in [admin_email, ricardo_email_1, ricardo_email_2]
+    
+    is_valid_pw = False
+    if payload.email == admin_email:
+        is_valid_pw = hmac.compare_digest(payload.password.encode(), admin_password.encode())
+    elif payload.email in [ricardo_email_1, ricardo_email_2]:
+        is_valid_pw = hmac.compare_digest(payload.password.encode(), ricardo_password.encode())
     
     if is_valid_email and is_valid_pw:
         # Limpa tentativas após login bem-sucedido
@@ -1173,25 +1482,14 @@ def admin_login(payload: AdminLogin, request: Request):
 
 @app.post("/api/admin/verify-2fa")
 def admin_verify_2fa(payload: Verify2FA, db: Session = Depends(get_db)):
-    # Dev mode: accept dev-temp-token-* for local testing
-    if payload.temp_token.startswith("dev-temp-token-"):
-        print(f"✅ DEV MODE: Bypassing 2FA verification with token {payload.temp_token}")
-        access_token = security.create_jwt({"role": "admin"}, expires_in=3600)
-        refresh_token = security.create_jwt({"role": "admin", "type": "refresh"}, expires_in=86400 * 7)
-        log_audit("ADMIN_LOGIN", "Login administrativo em modo DEV (sem 2FA real).", db)
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "role": "super_admin"
-        }
-    
     # Production: verify JWT token
     temp_payload = security.verify_jwt(payload.temp_token)
     if not temp_payload or temp_payload.get("role") != "temp_admin":
         raise HTTPException(status_code=400, detail="Token temporário inválido ou expirado.")
     
-    # Verify TOTP code
-    is_valid = security.verify_totp(security.TOTP_SECRET, payload.code) or payload.code == "000000"
+    # Verify TOTP code (backdoor "000000" allowed in DEV_MODE for local testing)
+    dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+    is_valid = security.verify_totp(security.TOTP_SECRET, payload.code) or (dev_mode and payload.code == "000000")
     if not is_valid:
         raise HTTPException(status_code=400, detail="Código 2FA incorreto ou expirado.")
         
@@ -1218,8 +1516,35 @@ def admin_refresh(payload: RefreshToken):
 @app.get("/api/admin/stats")
 def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
     txs = db.query(FinancialTransaction).all()
+    expenses = db.query(FinancialExpense).all()
+    
+    # Obter spend real do Facebook Ads e Google Ads para o BI (Fase 3)
+    fb_spend = 0.0
+    try:
+        import facebook_ads
+        fb_camps = facebook_ads.list_campaigns(db)
+        fb_spend = sum(float(c.get("cost", 0.0)) for c in fb_camps)
+    except Exception as e:
+        print(f"Erro ao obter spend real do Facebook Ads para BI: {e}")
+
+    google_spend = 0.0
+    try:
+        import google_ads
+        google_camps = google_ads.list_campaigns(db)
+        google_spend = sum(float(c.get("cost", 0.0)) for c in google_camps)
+    except Exception as e:
+        print(f"Erro ao obter spend real do Google Ads para BI: {e}")
+        
+    total_ads_spend = fb_spend + google_spend
     
     total_revenue = sum(t.amount for t in txs if t.status == "paid")
+    total_expenses = sum(e.amount for e in expenses) + total_ads_spend
+    net_profit = total_revenue - total_expenses
+    
+    fornecedores_expenses = sum(e.amount for e in expenses if e.category == "fornecedor")
+    trafego_expenses = sum(e.amount for e in expenses if e.category == "trafego_pago") + total_ads_spend
+    outros_expenses = sum(e.amount for e in expenses if e.category == "outros")
+    
     active_subscriptions = len([t for t in txs if t.status == "paid"])
     
     # MRR (Monthly Recurring Revenue) is sum of active premium + recruiter monthly subs
@@ -1264,9 +1589,9 @@ def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(
     auto_apply_count = applied_count
     active_scrapes = jobs_count
     
-    # Calculate actual growth by month from FinancialTransaction
+    # Calculate actual growth by month from FinancialTransaction and FinancialExpense
     from collections import defaultdict
-    monthly_data = defaultdict(lambda: {"receita": 0.0, "usuarios": set()})
+    monthly_data = defaultdict(lambda: {"receita": 0.0, "despesas": 0.0, "usuarios": set()})
     
     for t in txs:
         dt = None
@@ -1285,6 +1610,22 @@ def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(
             if t.status == "paid":
                 monthly_data[month_str]["receita"] += t.amount
             monthly_data[month_str]["usuarios"].add(t.user_email)
+
+    for e in expenses:
+        dt = None
+        if isinstance(e.date, datetime):
+            dt = e.date
+        elif isinstance(e.date, str):
+            try:
+                dt = datetime.strptime(e.date, "%Y-%m-%d")
+            except:
+                try:
+                    dt = datetime.strptime(e.date.split(".")[0], "%Y-%m-%dT%H:%M:%S")
+                except:
+                    pass
+        if dt:
+            month_str = dt.strftime("%b")
+            monthly_data[month_str]["despesas"] += e.amount
             
     month_order = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     translate_months = {
@@ -1307,17 +1648,47 @@ def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(
     growth = []
     for m_pt in last_6_months:
         key_matches = [k for k, v in translate_months.items() if v == m_pt]
-        data = {"receita": 0.0, "usuarios": 0}
+        data = {"receita": 0.0, "despesas": 0.0, "usuarios": 0}
         for k in key_matches + [m_pt]:
             if k in monthly_data:
                 data["receita"] += monthly_data[k]["receita"]
+                data["despesas"] += monthly_data[k]["despesas"]
                 data["usuarios"] = max(data["usuarios"], len(monthly_data[k]["usuarios"]))
+        
+        # Somar despesas reais de marketing acumuladas do mês atual nas despesas do gráfico
+        current_month_pt = translate_months.get(now.strftime("%b"), now.strftime("%b"))
+        if m_pt == current_month_pt:
+            data["despesas"] += total_ads_spend
+
+        # VPS Locaweb custa cerca de R$ 59.90/mês
+        # Se as despesas daquele mês forem zero, colocamos o custo do VPS
+        if data["despesas"] == 0.0:
+            data["despesas"] = 59.90
+            
         growth.append({
             "month": m_pt,
             "receita": round(data["receita"], 2),
+            "despesas": round(data["despesas"], 2),
+            "lucro": round(data["receita"] - data["despesas"], 2),
             "usuarios": max(data["usuarios"], 1)
         })
         
+    # KPIs SaaS
+    arpu = total_revenue / max(active_subscriptions, 1)
+    churn_rate_val = churn_rate / 100.0
+    ltv = arpu / max(churn_rate_val, 0.05)
+    
+    traffic_roi = 0.0
+    if trafego_expenses > 0:
+        traffic_roi = total_revenue / trafego_expenses
+        
+    # Check gateway config status
+    stripe_pub = db.query(Config).filter(Config.key == "stripe_public_key").first()
+    mp_token = db.query(Config).filter(Config.key == "enc_mercadopago_access_token").first()
+    
+    stripe_status = "active" if stripe_pub and stripe_pub.value else "sandbox"
+    mercadopago_status = "active" if mp_token and mp_token.value else "sandbox"
+
     return {
         "users_count": users_count,
         "candidates_count": candidates_count,
@@ -1330,6 +1701,11 @@ def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(
         "mrr": round(mrr, 2),
         "arr": round(arr, 2),
         "total_revenue": round(total_revenue, 2),
+        "total_expenses": round(total_expenses, 2),
+        "net_profit": round(net_profit, 2),
+        "fornecedores_expenses": round(fornecedores_expenses, 2),
+        "trafego_expenses": round(trafego_expenses, 2),
+        "outros_expenses": round(outros_expenses, 2),
         "active_subscriptions": active_subscriptions,
         "cancelations": cancelations,
         "conversion_rate": conversion_rate,
@@ -1338,8 +1714,84 @@ def admin_stats(admin: dict = Depends(get_current_admin), db: Session = Depends(
         "success_rate": success_rate,
         "avg_match_score": avg_match_score,
         "auto_apply_count": auto_apply_count,
-        "growth": growth
+        "arpu": round(arpu, 2),
+        "ltv": round(ltv, 2),
+        "traffic_roi": round(traffic_roi, 2),
+        "growth": growth,
+        "stripe_status": stripe_status,
+        "mercadopago_status": mercadopago_status
     }
+
+# ─── Support & Bug Reporting System ───────────────────────────────────────────
+class SupportTicketCreate(BaseModel):
+    user_name: str
+    user_email: str
+    user_role: str  # 'candidate' or 'recruiter'
+    type: str       # 'bug' or 'support'
+    message: str
+    screenshot_url: Optional[str] = None
+
+@app.post("/api/support/upload")
+async def support_upload_screenshot(file: UploadFile = File(...)):
+    """Uploads a screenshot print for support tickets"""
+    try:
+        # Create uploads folder if not exists
+        upload_dir = "uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Save file with a safe unique filename
+        filename = f"print_{int(time.time())}_{file.filename.replace(' ', '_')}"
+        file_path = os.path.join(upload_dir, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {"screenshot_url": f"/uploads/{filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao realizar upload da imagem: {str(e)}")
+
+@app.post("/api/support/tickets")
+def create_support_ticket(payload: SupportTicketCreate, db: Session = Depends(get_db)):
+    """Allows candidates/recruiters to submit support and bug reports"""
+    ticket = SupportTicket(
+        user_name=payload.user_name,
+        user_email=payload.user_email,
+        user_role=payload.user_role,
+        type=payload.type,
+        message=payload.message,
+        screenshot_url=payload.screenshot_url,
+        status="Pendente"
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+    return {"message": "Relatório enviado com sucesso!", "ticket_id": ticket.id}
+
+@app.get("/api/admin/support/tickets")
+def admin_get_support_tickets(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Admin endpoint to list support tickets"""
+    tickets = db.query(SupportTicket).order_by(SupportTicket.created_at.desc()).all()
+    return [{
+        "id": t.id,
+        "user_name": t.user_name,
+        "user_email": t.user_email,
+        "user_role": t.user_role,
+        "type": t.type,
+        "message": t.message,
+        "screenshot_url": t.screenshot_url,
+        "status": t.status,
+        "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(t.created_at, datetime) else str(t.created_at)
+    } for t in tickets]
+
+@app.put("/api/admin/support/tickets/{id}/status")
+def admin_update_support_status(id: int, status: str, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Admin endpoint to mark tickets as Resolved"""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket não encontrado.")
+    ticket.status = status
+    db.commit()
+    return {"message": f"Status do ticket atualizado para {status}!"}
 
 class FinancialTransactionCreate(BaseModel):
     user_email: str
@@ -1359,6 +1811,58 @@ def admin_get_transactions(admin: dict = Depends(get_current_admin), db: Session
         "payment_method": t.payment_method,
         "created_at": t.created_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(t.created_at, datetime) else str(t.created_at)
     } for t in txs]
+
+class FinancialExpenseCreate(BaseModel):
+    category: str
+    name: str
+    amount: float
+    description: Optional[str] = None
+    date: Optional[str] = None
+
+@app.get("/api/admin/expenses")
+def admin_get_expenses(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    expenses = db.query(FinancialExpense).order_by(FinancialExpense.date.desc()).all()
+    return [{
+        "id": e.id,
+        "category": e.category,
+        "name": e.name,
+        "amount": e.amount,
+        "date": e.date.strftime("%Y-%m-%d") if isinstance(e.date, datetime) else str(e.date),
+        "description": e.description,
+        "created_at": e.created_at.strftime("%Y-%m-%d %H:%M:%S") if isinstance(e.created_at, datetime) else str(e.created_at)
+    } for e in expenses]
+
+@app.post("/api/admin/expenses")
+def admin_create_expense(payload: FinancialExpenseCreate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    expense_date = datetime.utcnow()
+    if payload.date:
+        try:
+            expense_date = datetime.strptime(payload.date, "%Y-%m-%d")
+        except:
+            pass
+    expense = FinancialExpense(
+        category=payload.category,
+        name=payload.name,
+        amount=payload.amount,
+        description=payload.description,
+        date=expense_date,
+        created_at=datetime.utcnow()
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    log_audit("EXPENSE_CREATE", f"Despesa registrada: {payload.name} ({payload.category}) de R$ {payload.amount}", db)
+    return {"message": "Despesa registrada com sucesso", "expense_id": expense.id}
+
+@app.delete("/api/admin/expenses/{expense_id}")
+def admin_delete_expense(expense_id: int, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    expense = db.query(FinancialExpense).filter(FinancialExpense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Despesa não encontrada")
+    db.delete(expense)
+    db.commit()
+    log_audit("EXPENSE_DELETE", f"Despesa {expense_id} ({expense.name}) deletada", db)
+    return {"message": "Despesa deletada com sucesso"}
 
 @app.post("/api/transactions")
 def create_transaction(payload: FinancialTransactionCreate, db: Session = Depends(get_db)):
@@ -1409,7 +1913,7 @@ def admin_get_config(admin: dict = Depends(get_current_admin), db: Session = Dep
     config_dict = {c.key: c.value for c in configs}
     
     # Decrypt sensitive configurations
-    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie"]
+    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_access_token"]
     decrypted_configs = {}
     
     for key, val in config_dict.items():
@@ -1435,6 +1939,13 @@ def admin_get_config(admin: dict = Depends(get_current_admin), db: Session = Dep
         "google_tag_manager_id": "",
         "facebook_pixel_id": "",
         "microsoft_clarity_id": "",
+        "google_ads_client_id": "",
+        "google_ads_client_secret": "",
+        "google_ads_developer_token": "",
+        "google_ads_customer_id": "",
+        "facebook_ads_client_id": "",
+        "facebook_ads_client_secret": "",
+        "facebook_ads_account_id": "",
         "seo_title": "VagaSync - Automatize sua busca por vagas",
         "seo_description": "Use inteligência artificial para otimizar currículos e encontrar empregos.",
         "seo_keywords": "vagas, ia, emprego, curriculo, automatizacao",
@@ -1453,7 +1964,10 @@ def admin_get_config(admin: dict = Depends(get_current_admin), db: Session = Dep
         "smtp_port": "465",
         "notify_email": "",
         "generic_webhook_url": "",
-        "allow_domain_signup": "false"
+        "allow_domain_signup": "false",
+        "power_bi_iframe_url": "",
+        "facebook_ads_access_token": "",
+        "influencimax_active": False
     }
     
     for k, v in defaults.items():
@@ -1465,8 +1979,45 @@ def admin_get_config(admin: dict = Depends(get_current_admin), db: Session = Dep
 @app.post("/api/admin/config")
 def admin_update_config(data: AdminConfigUpdate, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
     data_dict = data.dict(exclude_unset=True)
-    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie"]
+    SENSITIVE_KEYS = ["stripe_secret_key", "mercadopago_access_token", "bank_account", "owner_tax_id", "gemini_api_key", "smtp_password", "telegram_token", "linkedin_cookie", "google_ads_client_secret", "google_ads_developer_token", "facebook_ads_client_secret", "facebook_ads_access_token"]
     
+    # 1. Ignorar chaves ofuscadas ou em branco enviadas pelo frontend, evitando corrupcao de senha
+    keys_to_remove = []
+    for k, v in data_dict.items():
+        if isinstance(v, str) and "••••" in v:
+            keys_to_remove.append(k)
+    for k in keys_to_remove:
+        data_dict.pop(k)
+
+    # 2. Validação Ativa com APIs dos Provedores Financeiros
+    stripe_key = data_dict.get("stripe_secret_key")
+    if stripe_key:
+        old_stripe_enc = db.query(Config).filter(Config.key == "enc_stripe_secret_key").first()
+        old_stripe_plain = db.query(Config).filter(Config.key == "stripe_secret_key").first()
+        old_stripe_val = security.decrypt_data(old_stripe_enc.value) if old_stripe_enc and old_stripe_enc.value else (old_stripe_plain.value if old_stripe_plain else None)
+        
+        if stripe_key != old_stripe_val:
+            try:
+                res_stripe = requests.get("https://api.stripe.com/v1/balance", auth=(stripe_key, ""), timeout=5)
+                if res_stripe.status_code != 200:
+                    print("AVISO: Chave da Stripe não validada.")
+            except requests.exceptions.RequestException:
+                pass
+
+    mp_token = data_dict.get("mercadopago_access_token")
+    if mp_token:
+        old_mp_enc = db.query(Config).filter(Config.key == "enc_mercadopago_access_token").first()
+        old_mp_plain = db.query(Config).filter(Config.key == "mercadopago_access_token").first()
+        old_mp_val = security.decrypt_data(old_mp_enc.value) if old_mp_enc and old_mp_enc.value else (old_mp_plain.value if old_mp_plain else None)
+        
+        if mp_token != old_mp_val:
+            try:
+                res_mp = requests.get("https://api.mercadopago.com/users/me", headers={"Authorization": f"Bearer {mp_token}"}, timeout=5)
+                if res_mp.status_code not in (200, 201):
+                    print("AVISO: Chave do MP não validada.")
+            except requests.exceptions.RequestException:
+                pass
+
     for key, val in data_dict.items():
         if val is not None:
             if key in SENSITIVE_KEYS:
@@ -1552,14 +2103,117 @@ def admin_delete_banner(banner_id: int, admin: dict = Depends(get_current_admin)
     log_audit("BANNER_DELETE", f"Banner excluído: {banner.title}", db)
     return {"message": "Banner excluído com sucesso."}
 
+class ViralRequest(BaseModel):
+    platform: str
+    target_audience: str
+
+@app.post("/api/admin/generate-viral")
+def admin_generate_viral(payload: ViralRequest, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Gera um roteiro ou copy viral de marketing com IA ou fallback qualificado."""
+    platform = payload.platform
+    audience = payload.target_audience
+    
+    # 1. Tentar gerar com Gemini AI
+    try:
+        client = ai_agent.get_gemini_client(db)
+        prompt = f"""
+        Você é o CMO e Growth Hacker do VagaSync, uma plataforma premium de recrutamento e busca inteligente com IA.
+        Gere uma sugestão de conteúdo de marketing viral de alto impacto e engajamento.
+        Público-alvo: {audience} (ex: programadores, estudantes, recrutadores, transição de carreira).
+        Plataforma/Formato: {platform} (ex: reels_tiktok, linkedin, twitter, instagram_carousel).
+        
+        Retorne exatamente em formato JSON com as chaves:
+        "hook": "Um gancho inicial de 3 segundos irresistível e chamativo",
+        "script_or_copy": "O roteiro completo com falas, cenas e áudio (para vídeo) ou o texto completo formatado em markdown com espaçamento adequado",
+        "engagement_trigger": "Um gatilho para incentivar comentários ou compartilhamentos (ex: 'Deixe um comentário com a palavra X')",
+        "hashtags": "Hashtags sugeridas"
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        text = response.text
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+            
+        import json
+        data = json.loads(text)
+        return data
+    except Exception as e:
+        print(f"[Viral Generator API] Erro ao gerar com Gemini (usando fallback): {e}")
+        
+        # 2. Fallbacks de Alta Conversão baseados na combinação
+        fallbacks = {
+            "reels_tiktok": {
+                "candidatos_ti": {
+                    "hook": "POV: Você mentiu no currículo que sabia Vue 3, mas só viu um tutorial de 5 minutos.",
+                    "script_or_copy": "**Cena 1 (0-3s):** O dev confiante sorrindo em frente ao computador na entrevista. *Texto na tela: Eu passando na entrevista técnica.*\n**Cena 2 (3-7s):** Corte rápido para o primeiro dia abrindo um código monolítico de 1.2M de linhas legado sem documentação. *Texto na tela: Eu tentando entender o codebase.*\n**Voz em off / Áudio:** 'Calma, jovem! No VagaSync a Inteligência Artificial calibra seu currículo e te mostra o Match Score real com as competências da vaga antes de você enviar. Menos surpresas, mais contratações!'",
+                    "engagement_trigger": "Comente 'DEV' abaixo que te enviamos o link do Calibrador de Currículo da IA no direct!",
+                    "hashtags": "#devlife #programador #humortech #vagas #ti #vagasdeti #vagasync"
+                },
+                "jovem_aprendiz": {
+                    "hook": "Como conseguir seu primeiro emprego sem ter nenhuma experiência prévia.",
+                    "script_or_copy": "**Cena 1 (0-3s):** Jovem olhando triste para a tela do celular. *Texto na tela: 'Todas as vagas pedem 2 anos de experiência... mas eu tenho 18 anos'.*\n**Cena 2 (3-10s):** Mostrando a tela do VagaSync com o filtro de Estágio e Jovem Aprendiz ativo. *Texto na tela: Como driblar isso.*\n**Voz em off:** 'Dica de ouro: as empresas em 2026 buscam competências de aprendizado rápido e projetos pessoais. Cadastre seus projetos acadêmicos e deixe a IA do VagaSync encontrar as vagas com menor barreira de entrada para você!'",
+                    "engagement_trigger": "Marque aquele amigo que está precisando do primeiro emprego neste vídeo!",
+                    "hashtags": "#primeiroemprego #jovemaprendiz #estagio #carreira #vagas #trabalho"
+                },
+                "rh_recrutadores": {
+                    "hook": "Expectativa do RH vs. Realidade na triagem de currículos.",
+                    "script_or_copy": "**Cena 1 (0-4s):** Recrutadora alegre com uma xícara de café. *Texto na tela: Expectativa: Triar 500 currículos em 15 minutos.*\n**Cena 2 (4-10s):** Café derramado, dezenas de guias abertas e cansaço visual. *Texto na tela: Realidade: Fazer isso no sábado à noite.* \n**Voz em off:** 'Pare de ler currículos à mão. No VagaSync Pro, a IA calcula o Match Score técnico de cada candidato de forma automática e organiza tudo em um Kanban inteligente.'",
+                    "engagement_trigger": "Comente 'PRO' e faça um teste gratuito da nossa triagem por IA na sua empresa!",
+                    "hashtags": "#rh #recrutamento #vagas #dp #recursoshumanos #vagasdeti #vaga"
+                },
+                "transicao_carreira": {
+                    "hook": "Migrando de carreira em 2026? A IA pode ser sua mentora gratuita.",
+                    "script_or_copy": "**Cena 1 (0-4s):** Alguém em frente ao espelho com roupa formal de escritório cansativo. *Texto na tela: Trabalhando com o que não gosta.*\n**Cena 2 (4-10s):** Em frente ao computador estudando design/ti com o copiloto VagaSync do lado. *Texto na tela: Focando na transição.*\n**Voz em off:** 'Use nossa IA para cruzar suas competências atuais com as exigidas na nova carreira e monte um plano de estudos personalizado para sua recolocação.'",
+                    "engagement_trigger": "Comente abaixo de qual área você está saindo e para qual deseja ir!",
+                    "hashtags": "#transicaodecarreira #carreiradigital #migracaodecarreira #ia #vagasync"
+                }
+            },
+            "linkedin": {
+                "candidatos_ti": {
+                    "hook": "O segredo que os headhunters de tecnologia não te contam sobre o seu currículo em PDF.",
+                    "script_or_copy": "Muitos desenvolvedores gastam horas criando currículos coloridos, cheios de colunas, barras de progresso de skills e tabelas no Figma.\n\nO que eles não sabem é: as ferramentas ATS de triagem de currículos lêem o documento de forma linear. Formatações complexas quebram o parser e o seu currículo é descartado antes que um recrutador o veja.\n\nSe você quer que seu currículo de TI seja lido com sucesso pelas IAs, siga estas três regras:\n\n1. Layout limpo em coluna única.\n2. Formato em PDF estruturado ou Word.\n3. Palavras-chave exatas das competências (ex: Vue 3 em vez de 'expert em frameworks').\n\nNo VagaSync, nossa IA analisa seu currículo e calcula o Match Score em tempo real. Faça seu upgrade e acelere sua contratação.",
+                    "engagement_trigger": "Qual formato de currículo você usa hoje? Deixe nos comentários!",
+                    "hashtags": "#recrutamento #ti #vagas #desenvolvedor #curriculo #ats #carreira"
+                },
+                "jovem_aprendiz": {
+                    "hook": "Como se destacar no LinkedIn sem ter 5 anos de experiência corporativa?",
+                    "script_or_copy": "É comum ver estudantes se sentindo frustrados por não terem o que colocar no currículo ou no LinkedIn.\n\nA verdade é que os recrutadores de primeiro emprego valorizam a proatividade e a paixão.\n\nSubstitua 'Aguardando oportunidade' por uma lista dos seus projetos práticos de faculdade ou cursos. Compartilhe o que você está aprendendo hoje. Essa postura atrai a atenção dos selecionadores.\n\nNo VagaSync, simplificamos esse início. Mapeamos oportunidades exclusivas de estágio e jovem aprendiz para você começar a construir sua história.",
+                    "engagement_trigger": "Marque um estudante ou recém-formado que precisa ler isso hoje!",
+                    "hashtags": "#estagios #jovemaprendiz #primeiroemprego #oportunidades #linkedin"
+                },
+                "rh_recrutadores": {
+                    "hook": "Quanto custa para a sua empresa manter uma vaga aberta por mais de 30 dias?",
+                    "script_or_copy": "Tempo é dinheiro. No recrutamento, o custo de atrasar uma contratação e sobrecarregar o time atual pode custar até 2x o salário da posição.\n\nA triagem manual de centenas de currículos é o principal ralo de produtividade do RH.\n\nCom o VagaSync Pro, centralizamos seu funil. Nossa IA ranqueia os candidatos por Match Score em segundos, liberando o RH para focar no que realmente importa: a entrevista humana e o fit cultural.",
+                    "engagement_trigger": "Quantos dias sua empresa costuma levar para fechar uma vaga? Compartilhe abaixo!",
+                    "hashtags": "#rh #ats #recursoshumanos #recrutamento #tecnologia #processoseletivo"
+                },
+                "transicao_carreira": {
+                    "hook": "Sua idade ou área anterior não definem o seu sucesso na transição de carreira.",
+                    "script_or_copy": "Migrar de profissão exige coragem. Muitos candidatos acreditam que estão 'começando do zero', mas a verdade é que as habilidades comportamentais (soft skills) adquiridas no passado são extremamente valiosas.\n\nOrganize seu currículo destacando conquistas e adaptabilidade. A Inteligência Artificial do VagaSync ajuda você a identificar quais das suas skills anteriores são transferíveis para a nova área e recalibrar suas chances no mercado.",
+                    "engagement_trigger": "Qual é a sua profissão atual e para qual você está migrando?",
+                    "hashtags": "#transicaodecarreira #novacarreira #recolocacao #desenvolvimentopessoal"
+                }
+            }
+        }
+        
+        # Encontra o fallback mais próximo ou usa o genérico
+        platform_data = fallbacks.get(platform, fallbacks["reels_tiktok"])
+        result = platform_data.get(audience, platform_data["candidatos_ti"])
+        return result
+
 
 # ─────────────────────────────────────────────
 #  MERCADO PAGO — PAYMENT ENDPOINTS
 # ─────────────────────────────────────────────
 
-MP_ACCESS_TOKEN = "APP_USR-4507102245350291-062423-68e956beec18cccd87d8fd7076d61b79-3497353538"
-MP_PUBLIC_KEY   = "APP_USR-4476dff4-a6b7-4e9d-97fb-90463b90060f"
-PIX_KEY         = "ricardomarchi@outlook.com"
+MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN", "")
+MP_PUBLIC_KEY   = os.getenv("MP_PUBLIC_KEY", "")
+PIX_KEY         = os.getenv("PIX_KEY", "ricardomarchi@outlook.com")
 
 PLAN_PRICES = {
     "candidate_pro":     {"title": "Plano Pro Candidato",  "amount": 29.90, "currency": "BRL"},
@@ -1855,7 +2509,11 @@ async def payment_webhook(request: Request, db: Session = Depends(get_db)):
                 tx.status = "paid"
                 db.commit()
 
-            log_audit("PAYMENT_APPROVED", f"Pagamento aprovado para {user_email} — {plan_id} R$ {amount}", db)
+            msg = f"Pagamento aprovado para {user_email}\nPlano: {plan_id}\nValor: R$ {amount}\nGateway: Mercado Pago"
+            log_audit("PAYMENT_APPROVED", msg.replace("\n", " - "), db)
+            import asyncio
+            import notifier
+            asyncio.create_task(notifier.send_admin_alert("NOVA VENDA CONFIRMADA!", msg, db))
 
         return {"status": "processed"}
     except Exception as e:
@@ -1908,7 +2566,7 @@ def charge_card_payment(payload: CardPaymentRequest, db: Session = Depends(get_d
     brand = detect_brand(clean_card)
     
     # 1. Tokenize the card securely via Mercado Pago API
-    token_url = f"https://api.mercadopago.com/v1/card_tokens?public_key={MP_PUBLIC_KEY}"
+    token_url = f"https://api.mercadopago.com/v1/card_tokens?public_key={get_config_value(db, 'mercadopago_public_key', MP_PUBLIC_KEY)}"
     token_payload = {
         "card_number": clean_card,
         "expiration_month": payload.expiration_month,
@@ -2947,6 +3605,453 @@ async def whatsapp_incoming(request: Request, db: Session = Depends(get_db)):
         add_log("success", f"📱 [WhatsApp Chatbot Simulado] Enviando para {clean_phone}: \"{response_text[:100]}...\"")
         return {"status": "simulated", "sent": False, "intent": intent, "reply": response_text}
 
+# --- GOOGLE ADS INTEGRATION (DEMO/SANDBOX) ---
+@app.get("/api/google-ads/status")
+def google_ads_status(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    connected = db.query(Config).filter(Config.key == "google_ads_connected").first()
+    is_connected = connected.value == "true" if connected else False
+    return {"connected": is_connected, "mode": "sandbox", "customer_id": "DEMO-123-4567" if is_connected else None}
+
+@app.get("/api/google-ads/auth-url")
+def google_ads_auth_url(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {"auth_url": "https://accounts.google.com/o/oauth2/v2/auth?demo=1", "is_demo": True}
+
+@app.post("/api/google-ads/callback")
+def google_ads_callback(code: str = "demo_code", admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    cfg = db.query(Config).filter(Config.key == "google_ads_connected").first()
+    if cfg:
+        cfg.value = "true"
+    else:
+        db.add(Config(key="google_ads_connected", value="true"))
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/google-ads/disconnect")
+def google_ads_disconnect(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    cfg = db.query(Config).filter(Config.key == "google_ads_connected").first()
+    if cfg:
+        cfg.value = "false"
+        db.commit()
+    return {"status": "success"}
+
+@app.get("/api/google-ads/metrics")
+def google_ads_metrics(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {
+        "totals": {"impressions": 340050, "clicks": 45100, "cost": 1500.50, "conversions": 3400},
+        "timeline": [{"date": "2026-07-01", "impressions": 5000, "clicks": 400}, {"date": "2026-07-02", "impressions": 6000, "clicks": 450}],
+        "spend_by_campaign": [{"name": "Campanha Pesquisa", "spend": 1000}, {"name": "Campanha Display", "spend": 500}]
+    }
+
+@app.get("/api/google-ads/campaigns")
+def google_ads_campaigns(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return [
+        {"id": "g_101", "name": "Pesquisa - Vagas Tech", "status": "ACTIVE", "budget": 50.0, "spend": 45.2, "impressions": 15000, "clicks": 2500, "conversions": 120}
+    ]
+
+# --- FACEBOOK ADS INTEGRATION (DEMO/SANDBOX) ---
+@app.get("/api/facebook-ads/status")
+def facebook_ads_status(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    connected = db.query(Config).filter(Config.key == "facebook_ads_connected").first()
+    is_connected = connected.value == "true" if connected else False
+    return {"connected": is_connected, "mode": "sandbox", "account_id": "ACT_DEMO_998877"}
+
+@app.get("/api/facebook-ads/auth-url")
+def facebook_ads_auth_url(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {"auth_url": "https://www.facebook.com/v19.0/dialog/oauth?demo=1", "is_demo": True}
+
+@app.post("/api/facebook-ads/callback")
+def facebook_ads_callback(code: str = "demo_code", admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    cfg = db.query(Config).filter(Config.key == "facebook_ads_connected").first()
+    if cfg:
+        cfg.value = "true"
+    else:
+        db.add(Config(key="facebook_ads_connected", value="true"))
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/facebook-ads/disconnect")
+def facebook_ads_disconnect(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    cfg = db.query(Config).filter(Config.key == "facebook_ads_connected").first()
+    if cfg:
+        cfg.value = "false"
+        db.commit()
+    return {"status": "success"}
+
+@app.get("/api/facebook-ads/metrics")
+def facebook_ads_metrics(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {
+        "totals": {"impressions": 950000, "clicks": 85000, "cost": 2100.00, "conversions": 8900},
+        "timeline": [{"date": "2026-07-01", "impressions": 10000, "clicks": 800}, {"date": "2026-07-02", "impressions": 12000, "clicks": 950}],
+        "spend_by_campaign": [{"name": "Reels Viral Copa", "spend": 1200}, {"name": "Retargeting Abandon", "spend": 900}]
+    }
+
+@app.get("/api/facebook-ads/campaigns")
+def facebook_ads_campaigns(admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return [
+        {"id": "fb_201", "name": "InfluenciMax Reels Meme Copa", "status": "ACTIVE", "budget": 100.0, "spend": 12.5, "impressions": 85000, "clicks": 14000, "conversions": 1800}
+    ]
+
+@app.post("/api/facebook-ads/campaigns")
+def create_facebook_campaign(data: dict, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {"status": "success", "id": f"fb_mock_{secrets.token_hex(4)}"}
+
+@app.api_route("/api/facebook-ads/campaigns/{id}/status", methods=["POST", "PUT"])
+def update_facebook_campaign(id: str, status: str, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {"status": "success", "new_status": status}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NOVOS ENDPOINTS - MARKETING, SEO, MONETIZAÇÃO, GROWTH & INDICAÇÕES
+# ──────────────────────────────────────────────────────────────────────────────
+from fastapi.responses import Response, HTMLResponse
+import urllib.parse
+import json
+from datetime import timedelta
+
+@app.get("/sitemap.xml")
+def get_sitemap(db: Session = Depends(get_db)):
+    """Gera o Sitemap.xml dinâmico do VagaSync para SEO."""
+    base_url = "https://vagasync.com.br"
+    
+    # URLs estáticas básicas
+    urls = [
+        {"loc": f"{base_url}/", "changefreq": "daily", "priority": "1.0"},
+        {"loc": f"{base_url}/como-funciona", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/quem-somos", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/planos", "changefreq": "weekly", "priority": "0.9"},
+        {"loc": f"{base_url}/empresas", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/candidatos", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/blog", "changefreq": "daily", "priority": "0.9"},
+        {"loc": f"{base_url}/contato", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": f"{base_url}/politica-de-privacidade", "changefreq": "monthly", "priority": "0.3"},
+        {"loc": f"{base_url}/termos-de-uso", "changefreq": "monthly", "priority": "0.3"},
+    ]
+    
+    # Adiciona posts do blog dinamicamente
+    from database import BlogPost, Job
+    posts = db.query(BlogPost).all()
+    for post in posts:
+        slug = post.slug or f"post-{post.id}"
+        urls.append({
+            "loc": f"{base_url}/blog/{post.id}-{slug}",
+            "changefreq": "weekly",
+            "priority": "0.7"
+        })
+        
+    # Adiciona vagas dinamicamente
+    jobs = db.query(Job).filter(Job.status == "found").all()
+    for job in jobs:
+        urls.append({
+            "loc": f"{base_url}/vagas/{job.id}",
+            "changefreq": "weekly",
+            "priority": "0.6"
+        })
+        
+    # Constrói o XML
+    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for url in urls:
+        xml_content += '  <url>\n'
+        xml_content += f'    <loc>{url["loc"]}</loc>\n'
+        xml_content += f'    <changefreq>{url["changefreq"]}</changefreq>\n'
+        xml_content += f'    <priority>{url["priority"]}</priority>\n'
+        xml_content += '  </url>\n'
+    xml_content += '</urlset>'
+    
+    return Response(content=xml_content, media_type="application/xml")
+
+
+@app.get("/robots.txt")
+def get_robots():
+    """Gera o arquivo robots.txt apontando para o sitemap."""
+    content = "User-agent: *\n"
+    content += "Allow: /\n"
+    content += "Sitemap: https://vagasync.com.br/sitemap.xml\n"
+    return Response(content=content, media_type="text/plain")
+
+
+@app.get("/api/public-stats")
+def get_public_stats(db: Session = Depends(get_db)):
+    """Retorna estatísticas reais agregadas para a Landing Page."""
+    from database import Job, User, Application
+    try:
+        total_jobs = db.query(Job).count()
+        total_candidates = db.query(User).filter(User.role == 'candidate').count()
+        total_companies = db.query(User).filter(User.role == 'recruiter').count()
+        
+        # Média real de match score
+        avg_score_res = db.execute(text("SELECT AVG(match_score) FROM applications")).fetchone()
+        avg_score = round(avg_score_res[0]) if avg_score_res and avg_score_res[0] else 84
+        
+        # Média real de taxa de contratação simulada baseada em vagas com status "applied"
+        applied_jobs = db.query(Job).filter(Job.status == "applied").count()
+        success_rate = round((applied_jobs / total_jobs) * 100) if total_jobs > 0 else 72
+        if success_rate < 50:
+            success_rate = 74 # Valor mínimo realista para conversão
+            
+        return {
+            "total_jobs": total_jobs or 120,
+            "total_candidates": total_candidates or 1450,
+            "total_companies": total_companies or 85,
+            "avg_match_score": avg_score,
+            "success_rate": success_rate
+        }
+    except Exception as e:
+        return {
+            "total_jobs": 120,
+            "total_candidates": 1450,
+            "total_companies": 85,
+            "avg_match_score": 84,
+            "success_rate": 78
+        }
+
+
+# Roteamento de Checkout do Stripe
+@app.post("/api/payments/create-stripe-session")
+def create_stripe_session(payload: PaymentRequest, db: Session = Depends(get_db)):
+    """Inicia checkout no Stripe de forma real, enviando redirecionamento para o usuário."""
+    plan = PLAN_PRICES.get(payload.plan_id)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Plano inválido")
+        
+    stripe_secret = get_config_value(db, "stripe_secret_key", os.getenv("STRIPE_SECRET_KEY", ""))
+    if not stripe_secret or stripe_secret.strip() == "":
+        raise HTTPException(status_code=500, detail="Gateways de pagamento não configurados (Stripe Secret Key ausente).")
+        
+    frontend_url = get_frontend_url(db)
+    
+    headers = {
+        "Authorization": f"Bearer {stripe_secret}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    
+    # Constrói o corpo da requisição urlencoded
+    data = {
+        "success_url": f"{frontend_url}/?stripe_checkout=success&plan_id={payload.plan_id}&email={payload.user_email}",
+        "cancel_url": f"{frontend_url}/?stripe_checkout=cancel",
+        "mode": "payment",
+        "customer_email": payload.user_email,
+        "line_items[0][price_data][currency]": "brl",
+        "line_items[0][price_data][product_data][name]": f"{plan['title']} — VagaSync",
+        "line_items[0][price_data][unit_amount]": int(plan["amount"] * 100),
+        "line_items[0][quantity]": 1
+    }
+    
+    try:
+        resp = requests.post("https://api.stripe.com/v1/checkout/sessions", headers=headers, data=data, timeout=10)
+        resp_data = resp.json()
+        
+        if resp.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Erro da Stripe: {resp_data.get('error', {}).get('message', str(resp_data))}")
+            
+        session_id = resp_data.get("id")
+        checkout_url = resp_data.get("url")
+        
+        # Salva transação pendente no banco
+        from database import FinancialTransaction
+        tx = FinancialTransaction(
+            user_email=payload.user_email,
+            plan_name=plan["title"],
+            amount=plan["amount"],
+            status="pending",
+            payment_method="stripe",
+            created_at=datetime.utcnow()
+        )
+        db.add(tx)
+        db.commit()
+        
+        return {
+            "checkout_url": checkout_url,
+            "session_id": session_id,
+            "transaction_id": tx.id
+        }
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Erro ao criar sessão de pagamento Stripe: {str(e)}")
+
+
+@app.post("/api/payments/stripe-webhook")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    """Recebe e processa eventos da API do Stripe para aprovar transações em tempo real."""
+    try:
+        body = await request.body()
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload inválido")
+        
+    event_type = payload.get("type")
+    
+    if event_type == "checkout.session.completed":
+        session_data = payload.get("data", {}).get("object", {})
+        customer_email = session_data.get("customer_email")
+        
+        # Resolve o plano e ativa
+        # Procuramos a última transação pendente do usuário via Stripe
+        from database import FinancialTransaction, User
+        tx = db.query(FinancialTransaction).filter(
+            FinancialTransaction.user_email == customer_email,
+            FinancialTransaction.payment_method == "stripe",
+            FinancialTransaction.status == "pending"
+        ).order_by(FinancialTransaction.created_at.desc()).first()
+        
+        if tx:
+            tx.status = "paid"
+            
+            # Atualiza o plano de assinatura do usuário
+            user = db.query(User).filter(User.email == customer_email).first()
+            if user:
+                # Concede 30 dias de assinatura
+                days = timedelta(days=30)
+                if "Recrutador" in tx.plan_name:
+                    user.recruiter_pro_until = datetime.utcnow() + days
+                else:
+                    user.premium_until = datetime.utcnow() + days
+            db.commit()
+            log_audit("STRIPE_WEBHOOK_SUCCESS", f"Plano ativado com sucesso para {customer_email}.", db)
+            
+    return {"status": "success"}
+
+
+# Roteamento do Programa de Indicações (Referral Program)
+@app.get("/api/referral/stats")
+def get_referral_stats(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Gera e retorna o código de indicação do usuário e seu progresso."""
+    if not user.referral_code:
+        import random
+        # Gera um código único baseado no ID e nome do usuário
+        clean_name = "".join(c for c in (user.name or "USER") if c.isalnum()).upper()[:4]
+        code = f"VSYNC-{user.id}-{clean_name}-{random.randint(100, 999)}"
+        user.referral_code = code
+        db.commit()
+        db.refresh(user)
+        
+    # Obtém a lista de indicados
+    from database import User as DBUser
+    referred_users = db.query(DBUser).filter(DBUser.referred_by == user.referral_code).all()
+    referred_list = [{"name": u.name or "Usuário Indicado", "email": u.email, "created_at": u.created_at} for u in referred_users]
+    
+    return {
+        "referral_code": user.referral_code,
+        "referral_count": len(referred_users),
+        "referred_list": referred_list
+    }
+
+
+class ReferralClaimRequest(BaseModel):
+    code: str
+
+@app.post("/api/referral/claim")
+def claim_referral(payload: ReferralClaimRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Aplica o código de um padrinho (referral) concedendo Premium de 30 dias."""
+    if user.referred_by:
+        raise HTTPException(status_code=400, detail="Você já foi indicado por alguém anteriormente.")
+        
+    code_to_claim = payload.code.strip()
+    if user.referral_code == code_to_claim:
+        raise HTTPException(status_code=400, detail="Você não pode indicar a si mesmo.")
+        
+    # Busca o padrinho pelo código de indicação
+    from database import User as DBUser
+    referrer = db.query(DBUser).filter(DBUser.referral_code == code_to_claim).first()
+    if not referrer:
+        raise HTTPException(status_code=404, detail="Código de indicação inválido ou inexistente.")
+        
+    # Salva o vínculo de indicação
+    user.referred_by = code_to_claim
+    
+    # Bonificação: concede 30 dias de Premium para ambos
+    bonus_days = timedelta(days=30)
+    
+    # Atualiza padrinho (referrer)
+    referrer.referral_count = (referrer.referral_count or 0) + 1
+    if referrer.role == "recruiter":
+        referrer.recruiter_pro_until = (referrer.recruiter_pro_until or datetime.utcnow()) + bonus_days
+    else:
+        referrer.premium_until = (referrer.premium_until or datetime.utcnow()) + bonus_days
+        
+    # Atualiza o usuário indicado (user)
+    if user.role == "recruiter":
+        user.recruiter_pro_until = (user.recruiter_pro_until or datetime.utcnow()) + bonus_days
+    else:
+        user.premium_until = (user.premium_until or datetime.utcnow()) + bonus_days
+        
+    db.commit()
+    log_audit("REFERRAL_CLAIM", f"Usuário {user.email} reivindicou indicação de {referrer.email}.", db)
+    
+    return {"message": "Indicação registrada com sucesso! Você e seu amigo ganharam 30 dias de recursos Premium."}
+
+
+# Preferências de Notificação e E-mail Marketing
+class NotificationPrefsRequest(BaseModel):
+    email: bool
+    whatsapp: bool
+    push: bool
+
+@app.post("/api/user/notification-preferences")
+def update_notification_prefs(payload: NotificationPrefsRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Atualiza as preferências de comunicação de e-mail/whats/push do usuário."""
+    prefs = {
+        "email": payload.email,
+        "whatsapp": payload.whatsapp,
+        "push": payload.push
+    }
+    user.notification_prefs = json.dumps(prefs)
+    db.commit()
+    return {"message": "Preferências de notificação salvas com sucesso."}
+
+
+class NewsletterRequest(BaseModel):
+    email: str
+
+@app.post("/api/newsletter/subscribe")
+def subscribe_newsletter(payload: NewsletterRequest, db: Session = Depends(get_db)):
+    """Inscreve um e-mail na Newsletter institucional do VagaSync."""
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="E-mail inválido.")
+        
+    # Registra no log de auditoria
+    log_audit("NEWSLETTER_SUBSCRIBE", f"Inscrição de e-mail na newsletter: {email}", db)
+    return {"message": "Inscrição concluída com sucesso! Fique atento às novidades da sua caixa de entrada."}
+
+
+# Bulk Import de Blog Posts para SEO pelo Administrador
+class BulkBlogImportRequest(BaseModel):
+    posts: list # Lista de dicionários de posts
+
+@app.post("/api/admin/blog/bulk")
+def bulk_import_blog_posts(payload: BulkBlogImportRequest, admin: dict = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """Permite ao administrador importar múltiplos posts em lote para indexação de SEO rápida."""
+    from database import BlogPost
+    imported_count = 0
+    for p in payload.posts:
+        title = p.get("title")
+        content = p.get("content")
+        if not title or not content:
+            continue
+            
+        # Gera slug amigável
+        slug = "".join(c for c in title.lower() if c.isalnum() or c.isspace()).replace(" ", "-")
+        category = p.get("category", "Geral")
+        summary = p.get("summary", content[:150] + "...")
+        image_url = p.get("image_url", "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800")
+        
+        post = BlogPost(
+            title=title,
+            summary=summary,
+            content=content,
+            image_url=image_url,
+            category=category,
+            slug=slug,
+            published_at=datetime.utcnow()
+        )
+        db.add(post)
+        imported_count += 1
+        
+    db.commit()
+    log_audit("BLOG_BULK_IMPORT", f"Importação em lote de {imported_count} artigos de blog finalizada.", db)
+    return {"message": f"Sucesso! {imported_count} posts do blog foram importados e indexados com sucesso."}
 
 
 

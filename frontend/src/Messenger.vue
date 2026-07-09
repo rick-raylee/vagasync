@@ -64,11 +64,14 @@ watch(
   ([notifId, list]) => {
     if (notifId) {
       selectedJobId.value = notifId;
+      activeMobileView.value = 'chat';
       if (props.clearNotificationSelection) {
         props.clearNotificationSelection();
       }
     } else if (list.length > 0 && selectedJobId.value === null) {
-      selectedJobId.value = list[0].id;
+      if (window.innerWidth > 768) {
+        selectedJobId.value = list[0].id;
+      }
     }
   },
   { immediate: true, deep: true }
@@ -361,27 +364,20 @@ const copyToClipboard = (text, fieldName) => {
   }).catch(() => {});
 };
 
+const activeMobileView = ref('list');
+
+const selectConversation = (jobId) => {
+  selectedJobId.value = jobId;
+  activeMobileView.value = 'chat';
+};
+
 </script>
 
 <template>
-  <div style="
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    height: calc(100vh - 180px);
-    min-height: 550px;
-    background: rgba(10, 15, 30, 0.6);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    overflow: hidden;
-  ">
+  <div class="messenger-container">
     
     <!-- ── Painel Esquerdo: Lista de Conversas ── -->
-    <div style="
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      background: rgba(13, 20, 38, 0.4);
-    ">
+    <div :class="['messenger-sidebar', { 'mobile-hidden': activeMobileView !== 'list' }]">
       <div style="
         padding: 1.25rem;
         border-bottom: 1px solid var(--border-color);
@@ -424,7 +420,7 @@ const copyToClipboard = (text, fieldName) => {
           <button
             v-for="job in contactedJobs"
             :key="job.id"
-            @click="selectedJobId = job.id"
+            @click="selectConversation(job.id)"
             :style="{
               width: '100%',
               textAlign: 'left',
@@ -491,11 +487,7 @@ const copyToClipboard = (text, fieldName) => {
     </div>
 
     <!-- ── Painel Direito: Chat do Recrutador ── -->
-    <div style="
-      display: flex;
-      flex-direction: column;
-      background: rgba(8, 12, 24, 0.3);
-    ">
+    <div :class="['messenger-chat', { 'mobile-hidden': activeMobileView !== 'chat' }]">
       <template v-if="activeJob">
         <!-- Header com Info de Contato (Endereço, Telefone, Email) -->
         <div style="
@@ -513,13 +505,24 @@ const copyToClipboard = (text, fieldName) => {
             flex-wrap: wrap;
             gap: 0.75rem;
           ">
-            <div>
-              <h4 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-primary);">
-                {{ activeJob.recruiter_name || 'Recrutador' }}
-              </h4>
-              <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
-                Recrutamento & Seleção na <strong>{{ activeJob.company }}</strong> para <em>{{ activeJob.title }}</em>
-              </p>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <!-- Botão voltar no mobile -->
+              <button 
+                class="mobile-back-btn" 
+                @click="activeMobileView = 'list'"
+                style="background: transparent; border: none; color: #00f2fe; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0.25rem; margin-right: 0.25rem;"
+                title="Voltar para conversas"
+              >
+                <i class="fa-solid fa-arrow-left" style="font-size: 1.15rem;"></i>
+              </button>
+              <div>
+                <h4 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: var(--text-primary);">
+                  {{ activeJob.recruiter_name || 'Recrutador' }}
+                </h4>
+                <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+                  Recrutamento & Seleção na <strong>{{ activeJob.company }}</strong> para <em>{{ activeJob.title }}</em>
+                </p>
+              </div>
             </div>
 
             <div style="display: flex; gap: 0.5rem;">
@@ -891,5 +894,49 @@ const copyToClipboard = (text, fieldName) => {
 }
 .conversation-item-btn:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.messenger-container {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: calc(100vh - 180px);
+  min-height: 550px;
+  background: rgba(10, 15, 30, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.messenger-sidebar {
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 20, 38, 0.4);
+}
+
+.messenger-chat {
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 12, 24, 0.3);
+}
+
+@media (max-width: 768px) {
+  .messenger-container {
+    grid-template-columns: 1fr !important;
+    height: calc(100vh - 220px) !important;
+    min-height: 400px !important;
+  }
+
+  .messenger-sidebar.mobile-hidden {
+    display: none !important;
+  }
+
+  .messenger-chat.mobile-hidden {
+    display: none !important;
+  }
+
+  .mobile-back-btn {
+    display: inline-flex !important;
+  }
 }
 </style>

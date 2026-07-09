@@ -239,7 +239,7 @@ def _send_whatsapp(phone: str, apikey: str, text: str) -> bool:
             }
             url = apikey
             if "/message/sendText/" not in url:
-                url = url.rstrip("/") + "/message/sendText/meu_bot"
+                url = url.rstrip("/") + "/message/sendText/whats_bot_v5"
             r = requests.post(url, headers=headers, json=body, timeout=10)
             return r.status_code in (200, 201)
         else:
@@ -256,6 +256,34 @@ def _send_whatsapp(phone: str, apikey: str, text: str) -> bool:
 # ─────────────────────────────────────────────
 # Orquestrador Principal
 # ─────────────────────────────────────────────
+
+async def send_admin_alert(subject: str, message: str, db: Session) -> dict:
+    """Dispara um alerta direto para o CEO (via todos os canais configurados) sobre vendas/status importantes."""
+    results = {}
+    loop = asyncio.get_event_loop()
+
+    wa_phone = get_cfg(db, "whatsapp_phone")
+    wa_apikey = get_cfg(db, "whatsapp_webhook")
+    if wa_phone and wa_apikey:
+        ok = await loop.run_in_executor(None, _send_whatsapp, wa_phone, wa_apikey, message)
+        results["whatsapp"] = ok
+
+    tg_token = get_cfg(db, "telegram_token")
+    tg_chat = get_cfg(db, "telegram_chat_id")
+    if tg_token and tg_chat:
+        ok = await loop.run_in_executor(None, _send_telegram, tg_token, tg_chat, f"💰 *{subject}*\n\n{message}")
+        results["telegram"] = ok
+
+    smtp_email = get_cfg(db, "smtp_email")
+    smtp_pass = get_cfg(db, "smtp_password")
+    notify_email = get_cfg(db, "notify_email") or smtp_email
+    if smtp_email and smtp_pass and notify_email:
+        h = get_cfg(db, "smtp_host") or "smtp.gmail.com"
+        p = int(get_cfg(db, "smtp_port") or 465)
+        ok = await loop.run_in_executor(None, _send_email, h, p, smtp_email, smtp_pass, notify_email, subject, message)
+        results["email"] = ok
+
+    return results
 
 async def dispatch_notification(event_type: str, job, db: Session) -> dict:
     """

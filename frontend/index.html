@@ -10,6 +10,42 @@
     <meta name="description" content="VagaSync - O buscador de vagas e candidatura automatizada inteligente com agentes de inteligência artificial. Conecte seu currículo e automatize inscrições." />
     <title>VagaSync | Automação e Busca de Vagas com IA</title>
 
+    <!-- Script para recarga de deploy e logger visual de erros JS -->
+    <script>
+      (function() {
+        var errorBanner = null;
+        window.addEventListener('error', function(e) {
+          var msg = e.message || '';
+          
+          // 1. Tratamento de erro de novo deploy (chunk offline)
+          if (msg.indexOf('Failed to fetch dynamically imported module') > -1 || 
+              msg.indexOf('Importing a module script failed') > -1 ||
+              (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') && e.target.src && e.target.src.indexOf('assets/') > -1)) {
+            console.warn('Novo deploy detectado! Recarregando...');
+            window.location.reload(true);
+            return;
+          }
+
+          // 2. Banner de depuração visual para celular
+          if (!errorBanner) {
+            errorBanner = document.createElement('div');
+            errorBanner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: rgba(239, 68, 68, 0.95); color: #fff; padding: 12px; font-size: 11px; z-index: 999999; font-family: monospace; word-break: break-all; border-bottom: 2px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5);';
+            errorBanner.innerHTML = '<strong>[Erro JS Diagnóstico]</strong> ';
+            var closeBtn = document.createElement('button');
+            closeBtn.style.cssText = 'float: right; background: none; border: none; color: #fff; font-weight: bold; cursor: pointer;';
+            closeBtn.innerHTML = 'Fechar &times;';
+            closeBtn.onclick = function() { errorBanner.style.display = 'none'; };
+            errorBanner.appendChild(closeBtn);
+            document.body.appendChild(errorBanner);
+          }
+          var file = e.filename ? e.filename.split('/').pop() : '';
+          var line = e.lineno || '';
+          var col = e.colno || '';
+          errorBanner.innerHTML += '<br/>• ' + msg + ' (' + file + ':' + line + ':' + col + ')';
+        }, true);
+      })();
+    </script>
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>

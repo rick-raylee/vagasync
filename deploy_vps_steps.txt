@@ -1,0 +1,188 @@
+DEPLOY VPS (www.vagasync.com.br) — FastAPI + Vite + Nginx + systemd
+
+Pré-requisitos (no VPS Linux)
+1) Instalar pacotes:
+   - nginx
+   - certbot + python3-certbot-nginx (se necessário)
+   - git (opcional)
+   - build tools (gcc/g++/make) se alguma lib precisar
+   - python3, python3-venv, python3-pip
+   - nodejs 20+ e npm
+
+2) Criar usuário de deploy (opcional, mas recomendado):
+   - sudo adduser --disabled-password --gecos "VagaSync" vagasync
+   - sudo usermod -aG www-data vagasync
+
+Estrutura de pastas (recomendado)
+/opt/vagasync/
+  backend/
+  frontend/
+  owner-panel/ (se você usar em produção; caso não, pode ignorar agora)
+  vagasync.db (SQLite persistente — ver observação abaixo)
+  backend/uploads/ (persistente)
+
+Observação sobre o SQLite
+- backend/database.py usa: sqlite:///./vagasync.db
+- Isso significa que o arquivo vagasync.db fica no diretório atual do processo uvicorn.
+- Portanto: ao rodar o backend via systemd, garanta WorkingDirectory=/opt/vagasync/backend ou ajuste o DATABASE_URL.
+- Neste guia, vamos manter o WorkingDirectory em /opt/vagasync/backend para o vagasync.db ficar em /opt/vagasync/backend/vagasync.db.
+
+Passo 1) Colocar código no VPS
+Opção A (recomendado): git pull do seu repo
+  - sudo mkdir -p /opt/vagasync
+  - sudo chown -R vagasync:vagasync /opt/vagasync
+  - cd /opt/vagasync
+  - git clone <SEU_REPO> .
+
+Opção B: copiar via zip/scp
+
+Passo 2) Backend: venv + deps
+1) Criar venv e instalar requirements:
+   - cd /opt/vagasync/backend
+   - python3 -m venv venv
+   - ./venv/bin/pip install --upgrade pip
+   - ./venv/bin/pip install -r requirements.txt
+
+2) Testar localmente (sem systemd):
+   - ./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+   - Verificar: http://SEU_IP:8000/ deve retornar {"status": "..."}
+
+Passo 3) Backend: systemd unit
+Crie o unit:
+  /etc/systemd/system/vagasync-backend.service
+Conteúdo (use exatamente):
+
+[Unit]
+Description=VagaSync Backend (FastAPI/Uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vagasync
+Group=www-data
+WorkingDirectory=/opt/vagasync/backend
+Environment=PYTHONUNBUFFERED=1
+Environment=ALLOWED_ORIGINS=https://vagasync.com.br,https://www.vagasync.com.br,https://ceo.vagasync.com.br
+Environment=FRONTEND_URL=https://www.vagasync.com.br
+Environment=BACKEND_URL=https://www.vagasync.com.br
+# Chaves/segredos devem ir para Config no banco ou via environment quando o código consumir via os.environ
+# Environment=GEMINI_API_KEY=...
+
+ExecStart=/opt/vagasync/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
+Aplicar e iniciar:
+  - sudo systemctl daemon-reload
+  - sudo systemctl enable --now vagasync-backend
+  - sudo systemctl status vagasync-backend --no-pager
+
+Passo 4) Frontend: build
+1) Build produção:
+   - cd /opt/vagasync/frontend
+   - npm ci
+   - npm run build
+
+O build gera: /opt/vagasync/frontend/dist
+
+Passo 5) Nginx: serve frontend + proxy /api e /uploads
+Crie o site:
+  /etc/nginx/sites-available/vagasync
+E coloque:
+
+server {
+    listen 80;
+    server_name www.vagasync.com.br;
+
+    # Opcional: redirecionar para HTTPS se cert já existir
+    # return 301 https://$host$request_uri;
+
+    location / {
+        root /opt/vagasync/frontend/dist;
+        try_files $uri $uri/ /index.html;
+        index index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Web/SSE
+        proxy_buffering off;
+        proxy_cache off;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+
+Habilitar site:
+  - sudo ln -sf /etc/nginx/sites-available/vagasync /etc/nginx/sites-enabled/
+  - sudo nginx -t
+  - sudo systemctl reload nginx
+
+Passo 6) HTTPS (já que você disse que tem HTTPS/NGINX)
+Se você ainda precisa emitir cert:
+  - sudo certbot --nginx -d www.vagasync.com.br
+
+Se já tem cert, apenas garanta que Nginx está com server block 443.
+
+Passo 7) Atualização de código (deploy incremental)
+Quando você fizer mudanças e quiser “atualizar o recrutador” (ou qualquer parte):
+1) Atualizar backend:
+   - cd /opt/vagasync/backend
+   - git pull
+   - ./venv/bin/pip install -r requirements.txt (somente se requirements mudou)
+   - sudo systemctl restart vagasync-backend
+
+2) Atualizar frontend:
+   - cd /opt/vagasync/frontend
+   - git pull
+   - npm ci
+   - npm run build
+   - sudo systemctl restart nginx
+
+Checklist pós-deploy
+- http(s)://www.vagasync.com.br abre a UI
+- http(s)://www.vagasync.com.br/api/health (ou endpoint equivalente) responde
+- http(s)://www.vagasync.com.br/api/config (ou endpoints reais do front) respondem com auth quando aplicável
+- http(s)://www.vagasync.com.br/uploads/... serve imagens
+- systemd logs (debug):
+  - sudo journalctl -u vagasync-backend -f
+
+Comandos rápidos (VPS)
+Backend
+- cd /opt/vagasync/backend
+- ./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+
+Gerenciamento systemd
+- sudo systemctl status vagasync-backend --no-pager
+- sudo systemctl restart vagasync-backend
+
+Frontend (build)
+- cd /opt/vagasync/frontend
+- npm ci
+- npm run build
+
+Nginx
+- sudo nginx -t
+- sudo systemctl reload nginx
+
+

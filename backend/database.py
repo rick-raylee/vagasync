@@ -33,6 +33,36 @@ class Job(Base):
     followup_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
+    recruiter_id = Column(Integer, nullable=True)  # Adicionado na Fase 2
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    name = Column(String, nullable=True)
+    role = Column(String, default="candidate")  # 'candidate', 'recruiter', 'admin'
+    resume_text = Column(Text, nullable=True)
+    premium_until = Column(DateTime, nullable=True)
+    recruiter_pro_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    referral_code = Column(String, nullable=True, index=True)
+    referred_by = Column(String, nullable=True, index=True)
+    referral_count = Column(Integer, default=0)
+    notification_prefs = Column(Text, nullable=True) # JSON configuration
+
+class Application(Base):
+    __tablename__ = "applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    candidate_id = Column(Integer, index=True)
+    job_id = Column(Integer, index=True)
+    status = Column(String, default="found")  # found, applying, applied, failed...
+    match_score = Column(Integer, nullable=True)
+    match_explanation = Column(Text, nullable=True)
+    applied_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Config(Base):
     __tablename__ = "configs"
@@ -75,6 +105,8 @@ class BlogPost(Base):
     content = Column(Text, nullable=True)
     image_url = Column(String, nullable=True)
     published_at = Column(DateTime, default=datetime.utcnow)
+    category = Column(String, nullable=True, index=True)
+    slug = Column(String, nullable=True, index=True)
 
 class Banner(Base):
     __tablename__ = "banners"
@@ -95,6 +127,17 @@ class FinancialTransaction(Base):
     amount = Column(Float)
     status = Column(String, default="paid") # paid, pending, cancelled
     payment_method = Column(String) # stripe, mercadopago, pix
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FinancialExpense(Base):
+    __tablename__ = "financial_expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String)  # 'fornecedor', 'trafego_pago', 'outros'
+    name = Column(String)      # e.g., 'Gemini API', 'Locaweb VPS', 'Google Ads'
+    amount = Column(Float)
+    date = Column(DateTime, default=datetime.utcnow)
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class FeedPost(Base):
@@ -151,6 +194,31 @@ class AssessmentSubmission(Base):
     score = Column(Integer) # correct answers
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_name = Column(String, nullable=False)
+    user_email = Column(String, nullable=False)
+    user_role = Column(String, nullable=False)  # 'candidate' or 'recruiter'
+    type = Column(String, nullable=False)       # 'bug' or 'support'
+    message = Column(Text, nullable=False)
+    screenshot_url = Column(String, nullable=True)
+    status = Column(String, default="Pendente")  # 'Pendente', 'Resolvido'
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AdsSpendCache(Base):
+    __tablename__ = "ads_spend_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String, index=True)  # 'facebook' ou 'google'
+    date = Column(String, index=True)  # 'YYYY-MM-DD'
+    spend = Column(Float, default=0.0)
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    conversions = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     
@@ -166,6 +234,27 @@ def init_db():
             db.execute(text("ALTER TABLE jobs ADD COLUMN image_url TEXT"))
         if "expires_at" not in columns:
             db.execute(text("ALTER TABLE jobs ADD COLUMN expires_at DATETIME"))
+        if "recruiter_id" not in columns:
+            db.execute(text("ALTER TABLE jobs ADD COLUMN recruiter_id INTEGER"))
+        
+        # Migrações da tabela 'users'
+        users_columns = [row[1] for row in db.execute(text("PRAGMA table_info(users)")).fetchall()]
+        if "referral_code" not in users_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN referral_code TEXT"))
+        if "referred_by" not in users_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN referred_by TEXT"))
+        if "referral_count" not in users_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0"))
+        if "notification_prefs" not in users_columns:
+            db.execute(text("ALTER TABLE users ADD COLUMN notification_prefs TEXT"))
+
+        # Migrações da tabela 'blog_posts'
+        blog_columns = [row[1] for row in db.execute(text("PRAGMA table_info(blog_posts)")).fetchall()]
+        if "category" not in blog_columns:
+            db.execute(text("ALTER TABLE blog_posts ADD COLUMN category TEXT"))
+        if "slug" not in blog_columns:
+            db.execute(text("ALTER TABLE blog_posts ADD COLUMN slug TEXT"))
+            
         db.commit()
         
         # Check if transaction table is empty
