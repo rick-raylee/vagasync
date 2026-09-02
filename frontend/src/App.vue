@@ -25,9 +25,11 @@ import JobMap from './JobMap.vue';
 import ContatoRH from './ContatoRH.vue';
 import Messenger from './Messenger.vue';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:8000/api'
-  : '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8000/api'
+    : (window.location.hostname.endsWith('github.io') ? 'https://vagasync.com.br/api' : '/api')
+);
 
 // Config state
 const config = ref({
