@@ -1,0 +1,10 @@
+{
+  "name": "vagasync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VagaSync Platform",
+  "scripts": {
+    "build": "npm --prefix frontend install --legacy-peer-deps && npm --prefix frontend run build",
+    "start": "node server.js"
+  }
+}
