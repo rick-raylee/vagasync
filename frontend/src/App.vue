@@ -86,6 +86,14 @@ const liveStatus = ref(null);
 const activeSources = ref([]); // fontes de busca ativas
 const uploadProgress = ref(null);
 const resumeAnalysis = ref(null);
+try {
+  const cachedAnalysis = localStorage.getItem('vagasync_resume_analysis');
+  if (cachedAnalysis) {
+    resumeAnalysis.value = JSON.parse(cachedAnalysis);
+  }
+} catch (e) {
+  console.error("Error loading cached resume analysis:", e);
+}
 const toast = ref(null);
 const publishedJobSuccessData = ref(null);
 const jobLinkCopied = ref(false);
@@ -520,12 +528,34 @@ const selectedBlogPost = ref(null);
 
 // Wrapper HTTP com Autenticação JWT
 const fetchWithAuth = async (url, options = {}) => {
-  const token = localStorage.getItem('vagasync_token');
+  let token = localStorage.getItem('vagasync_token');
   const headers = { ...options.headers };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  return fetch(url, { ...options, headers });
+  let res = await fetch(url, { ...options, headers });
+  
+  if (res.status === 401 && localStorage.getItem('vagasync_refresh')) {
+    try {
+      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: localStorage.getItem('vagasync_refresh') })
+      });
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        localStorage.setItem('vagasync_token', refreshData.access_token);
+        localStorage.setItem('vagasync_refresh', refreshData.refresh_token);
+        headers['Authorization'] = `Bearer ${refreshData.access_token}`;
+        res = await fetch(url, { ...options, headers });
+      } else {
+        handleLogout();
+      }
+    } catch (err) {
+      console.error('Error refreshing token:', err);
+    }
+  }
+  return res;
 };
 
 // Helper de Rastreamento Analytics (GA4 / Meta Pixel)
@@ -561,6 +591,40 @@ const loadPublicStats = async () => {
     console.error("Erro ao carregar estatísticas públicas:", e);
   }
 };
+
+const fetchUserProfile = async () => {
+  if (!isLoggedIn.value) return;
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/auth/me`);
+    if (res.ok) {
+      const data = await res.json();
+      config.value.resume_text = data.resume_text;
+      if (data.resume_analysis) {
+        resumeAnalysis.value = data.resume_analysis;
+        localStorage.setItem('vagasync_resume_analysis', JSON.stringify(data.resume_analysis));
+      } else {
+        resumeAnalysis.value = null;
+        localStorage.removeItem('vagasync_resume_analysis');
+      }
+      if (data.name) {
+        profileData.value.name = data.name;
+        localStorage.setItem('vagasync_profile_name', data.name);
+      }
+      if (data.email) {
+        profileData.value.email = data.email;
+        localStorage.setItem('vagasync_profile_email', data.email);
+      }
+    }
+  } catch (e) {
+    console.error("Error loading user profile:", e);
+  }
+};
+
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    fetchUserProfile();
+  }
+}, { immediate: true });
 
 // Carrega Estatísticas de Indicação do Usuário
 const loadReferralStats = async () => {
@@ -1015,6 +1079,85 @@ const handleLinkedinCallback = () => {
   window.history.replaceState({}, document.title, window.location.pathname);
 };
 
+const handleGoogleCallback = async (response) => {
+  if (!response || !response.credential) {
+    showToast('Falha Google', 'Não foi possível obter credenciais do Google.', 'error');
+    return;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/auth/google/callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('vagasync_logged', 'true');
+      localStorage.setItem('vagasync_role', data.role);
+      localStorage.setItem('vagasync_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('vagasync_refresh', data.refresh_token);
+      if (data.name) localStorage.setItem('vagasync_profile_name', data.name);
+      if (data.email) localStorage.setItem('vagasync_profile_email', data.email);
+      userRole.value = data.role;
+      isLoggedIn.value = true;
+      showAuthCard.value = false;
+      
+      activeTab.value = data.role === 'recruiter' ? 'recruiter_dashboard' : data.role === 'super_admin' ? 'super_admin' : 'dashboard';
+      showToast('Login Google', `Login autorizado pelo Google — ${data.name || 'Usuário'}!`, 'success');
+      trackEvent('login_google', { email: data.email, role: data.role });
+    } else {
+      const err = await res.json();
+      showToast('Erro Google', err.detail || 'Falha ao autenticar com o Google.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Erro de Conexão', 'Falha ao conectar com o servidor.', 'error');
+  }
+};
+
+const initGoogleSignIn = () => {
+  if (window.google) {
+    window.google.accounts.id.initialize({
+      client_id: "223926647816-72gp4pekojfk2q3p9ro4o67i8058csi0.apps.googleusercontent.com",
+      callback: handleGoogleCallback
+    });
+    
+    const btnLogin = document.getElementById("google-signin-btn");
+    if (btnLogin) {
+      window.google.accounts.id.renderButton(
+        btnLogin,
+        { theme: "outline", size: "large", width: "360", text: "signin_with" }
+      );
+    }
+    
+    const btnSignup = document.getElementById("google-signin-btn-signup");
+    if (btnSignup) {
+      window.google.accounts.id.renderButton(
+        btnSignup,
+        { theme: "outline", size: "large", width: "360", text: "signup_with" }
+      );
+    }
+  } else {
+    setTimeout(initGoogleSignIn, 500);
+  }
+};
+
+watch(authMode, () => {
+  nextTick(() => {
+    initGoogleSignIn();
+  });
+});
+
+watch(showAuthCard, (newVal) => {
+  if (newVal) {
+    nextTick(() => {
+      initGoogleSignIn();
+    });
+  }
+});
+
 const handleSignup = async (e) => {
   e.preventDefault();
   
@@ -1081,6 +1224,8 @@ const handleLogout = () => {
   localStorage.removeItem('vagasync_linkedin_connected');
   localStorage.removeItem('vagasync_token');
   localStorage.removeItem('vagasync_refresh');
+  localStorage.removeItem('vagasync_resume_analysis');
+  resumeAnalysis.value = null;
   linkedinTrigger.value++;
   isLoggedIn.value = false;
   userRole.value = 'candidate';
@@ -1300,6 +1445,7 @@ onMounted(() => {
   }
 
   handleLinkedinCallback();
+  initGoogleSignIn();
 
   if (isLoggedIn.value) {
     if (userRole.value === 'recruiter') {
@@ -1476,7 +1622,7 @@ const handleResumeUpload = async (file) => {
   
   try {
     uploadProgress.value = 'parsing';
-    const res = await fetch(`${API_BASE}/resume/upload`, {
+    const res = await fetchWithAuth(`${API_BASE}/resume/upload`, {
       method: 'POST',
       body: formData
     });
@@ -1484,6 +1630,7 @@ const handleResumeUpload = async (file) => {
       const data = await res.json();
       uploadProgress.value = 'done';
       resumeAnalysis.value = data.analysis;
+      localStorage.setItem('vagasync_resume_analysis', JSON.stringify(data.analysis));
       config.value.resume_text = data.resume_text;
       showToast('Currículo Importado!', 'A IA analisou suas competências e atualizou seu perfil.', 'success');
     } else {
@@ -1654,7 +1801,7 @@ const triggerNotificationChat = (jobId) => {
 const saveResumeText = async () => {
   uploadProgress.value = 'parsing';
   try {
-    const res = await fetch(`${API_BASE}/resume/upload`, {
+    const res = await fetchWithAuth(`${API_BASE}/resume/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ text: config.value.resume_text })
@@ -1663,6 +1810,7 @@ const saveResumeText = async () => {
       const data = await res.json();
       uploadProgress.value = 'done';
       resumeAnalysis.value = data.analysis;
+      localStorage.setItem('vagasync_resume_analysis', JSON.stringify(data.analysis));
       showToast('Currículo Atualizado', 'Seu currículo em texto foi salvo com sucesso.', 'success');
     }
   } catch (e) {
@@ -3096,6 +3244,20 @@ const openApplyModal = (job) => {
   showApplyRecruiterModal.value = true;
 };
 
+const handleSelectJobFromMap = (jobId) => {
+  const job = jobs.value.find(j => j.id === jobId);
+  if (!job) return;
+  if (job.source === 'recruiter') {
+    if (job.status === 'found') {
+      openApplyModal(job);
+    } else {
+      showToast('Candidatura Concluída', 'Você já enviou seu currículo para esta vaga. O chat está liberado!', 'success');
+    }
+  } else {
+    window.open(job.link, '_blank');
+  }
+};
+
 const confirmApplyToRecruiterJob = async () => {
   if (!selectedJobForApply.value) return;
 
@@ -4380,6 +4542,8 @@ const restoreCandidate = () => {
                 <i class="fa-brands fa-linkedin" style="font-size: 1.25rem;"></i>
                 Entrar com o LinkedIn
               </button>
+
+              <div id="google-signin-btn" style="margin-top: 0.75rem; width: 100%; display: flex; justify-content: center;"></div>
             </form>
 
             <!-- Signup Form -->
@@ -4440,6 +4604,22 @@ const restoreCandidate = () => {
               <button type="submit" class="btn btn-primary" style="width: 100%;">
                 Criar Conta & Sincronizar
               </button>
+
+              <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                Ou cadastre-se rapidamente com suas redes:
+              </div>
+
+              <button 
+                type="button" 
+                @click="handleLinkedinLogin" 
+                class="btn-linkedin-auth"
+                style="width: 100%; margin-top: 1rem;"
+              >
+                <i class="fa-brands fa-linkedin" style="font-size: 1.25rem;"></i>
+                Cadastrar com o LinkedIn
+              </button>
+
+              <div id="google-signin-btn-signup" style="margin-top: 0.75rem; width: 100%; display: flex; justify-content: center;"></div>
 
               <p style="text-align: center; font-size: 0.85rem; margin-top: 1.5rem; color: var(--text-secondary);">
                 Já possui conta? 
@@ -7792,7 +7972,7 @@ const restoreCandidate = () => {
         <!-- ── Aba Mapa de Vagas ── -->
         <template v-if="activeTab === 'map'">
           <div class="glass-card" style="padding: 1.5rem;">
-            <JobMap :jobs="jobs" :mapsApiKey="config.google_maps_api_key" />
+            <JobMap :jobs="jobs" :mapsApiKey="config.google_maps_api_key" @select-job="handleSelectJobFromMap" />
           </div>
         </template>
 

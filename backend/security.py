@@ -7,9 +7,9 @@ import base64
 import json
 from typing import Optional
 
-JWT_SECRET = "vagasync_super_secret_jwt_key_2026"
-ENCRYPTION_SECRET = "vagasyncsuperadminfinancialsecret2026"
-TOTP_SECRET = "VAGASYNCSUPERADM" # base32 format (16 chars)
+JWT_SECRET = os.getenv("JWT_SECRET", "vagasync_super_secret_jwt_key_2026")
+ENCRYPTION_SECRET = os.getenv("ENCRYPTION_SECRET", "vagasyncsuperadminfinancialsecret2026")
+TOTP_SECRET = os.getenv("TOTP_SECRET", "VAGASYNCSUPERADM") # base32 format (16 chars)
 
 # --- 2FA / TOTP ---
 def get_totp_token(secret: str, intervals_no: int) -> str:

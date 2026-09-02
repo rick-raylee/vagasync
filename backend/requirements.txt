@@ -8,3 +8,5 @@ requests
 python-multipart
 websockets
 slowapi
+bcrypt
+python-dotenv

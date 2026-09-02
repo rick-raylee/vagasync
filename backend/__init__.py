@@ -1,0 +1,1 @@
+# VagaSync backend package initializer

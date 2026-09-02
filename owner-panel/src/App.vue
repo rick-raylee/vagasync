@@ -1023,9 +1023,9 @@ onMounted(() => {
     </div>
 
     <!-- Main Dashboard Layout -->
-    <div v-else style="display: flex; min-height: 100vh;">
+    <div v-else class="dashboard-layout">
       <!-- Sidebar Navigation -->
-      <aside style="width: 260px; background: rgba(10, 15, 30, 0.85); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 1.5rem; gap: 2rem;">
+      <aside class="sidebar-nav">
         <div style="display: flex; align-items: center; gap: 0.75rem;">
           <Shield :size="24" style="color: var(--color-secondary);" />
           <div>
@@ -1078,7 +1078,7 @@ onMounted(() => {
       </aside>
 
       <!-- Main Body Container -->
-      <main style="flex-grow: 1; padding: 2rem; overflow-y: auto;">
+      <main class="main-content">
         
         <!-- Tab 1: Visão Geral -->
         <div v-if="activeTab === 'overview'" style="display: flex; flex-direction: column; gap: 1.5rem;">
@@ -2818,5 +2818,42 @@ onMounted(() => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Responsive Dashboard Layout */
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar-nav {
+  width: 260px;
+  background: rgba(10, 15, 30, 0.85);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  gap: 2rem;
+  flex-shrink: 0;
+}
+.main-content {
+  flex-grow: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+  .sidebar-nav {
+    width: 100% !important;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem;
+    gap: 1rem;
+  }
+  .main-content {
+    padding: 1rem;
+  }
 }
 </style>

@@ -328,6 +328,7 @@ Retorne SOMENTE um array JSON válido (sem texto antes ou depois), com até 6 va
             print(f"[Gemini Search] Texto recebido: {raw_text[:300] if 'raw_text' in dir() else 'N/A'}")
         except Exception as e:
             print(f"[Gemini Search] Erro na busca para '{keyword}': {e}")
+            raise e
 
     print(f"[Gemini Search] Total de vagas únicas encontradas: {len(all_jobs)}")
     return all_jobs
@@ -401,6 +402,7 @@ Retorne SOMENTE um array JSON válido com até 8 vagas do LinkedIn:
 
     except Exception as e:
         print(f"[Gemini LinkedIn] Erro: {e}")
+        raise e
 
     return all_jobs
 
