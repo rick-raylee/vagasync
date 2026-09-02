@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="icon" type="image/png" href="./vagasync_logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="VagaSync - O buscador de vagas e candidatura automatizada inteligente com agentes de inteligência artificial. Conecte seu currículo e automatize inscrições." />
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.vagasync.com.br/" />
+    <meta property="og:title" content="VagaSync | Automação e Busca de Vagas com IA" />
+    <meta property="og:description" content="O buscador de vagas e candidatura automatizada inteligente com agentes de IA. Conecte seu currículo e conquiste vagas automaticamente." />
+    <meta property="og:image" content="https://www.vagasync.com.br/vagasync_logo.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://www.vagasync.com.br/" />
+    <meta property="twitter:title" content="VagaSync | Automação e Busca de Vagas com IA" />
+    <meta property="twitter:description" content="O buscador de vagas e candidatura automatizada inteligente com agentes de IA. Conecte seu currículo e conquiste vagas automaticamente." />
+    <meta property="twitter:image" content="https://www.vagasync.com.br/vagasync_logo.png" />
+    <title>VagaSync | Automação e Busca de Vagas com IA</title>
+
+    <!-- Script para recarga de deploy e logger visual de erros JS -->
+    <script>
+      (function() {
+        var errorBanner = null;
+        window.addEventListener('error', function(e) {
+          var msg = e.message || '';
+          
+          // 1. Tratamento de erro de novo deploy (chunk offline)
+          if (msg.indexOf('Failed to fetch dynamically imported module') > -1 || 
+              msg.indexOf('Importing a module script failed') > -1 ||
+              (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') && e.target.src && e.target.src.indexOf('assets/') > -1)) {
+            console.warn('Novo deploy detectado! Recarregando...');
+            window.location.reload(true);
+            return;
+          }
+
+          // 2. Banner de depuração visual para celular
+          if (!errorBanner) {
+            errorBanner = document.createElement('div');
+            errorBanner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: rgba(239, 68, 68, 0.95); color: #fff; padding: 12px; font-size: 11px; z-index: 999999; font-family: monospace; word-break: break-all; border-bottom: 2px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5);';
+            errorBanner.innerHTML = '<strong>[Erro JS Diagnóstico]</strong> ';
+            var closeBtn = document.createElement('button');
+            closeBtn.style.cssText = 'float: right; background: none; border: none; color: #fff; font-weight: bold; cursor: pointer;';
+            closeBtn.innerHTML = 'Fechar &times;';
+            closeBtn.onclick = function() { errorBanner.style.display = 'none'; };
+            errorBanner.appendChild(closeBtn);
+            document.body.appendChild(errorBanner);
+          }
+          var file = e.filename ? e.filename.split('/').pop() : '';
+          var line = e.lineno || '';
+          var col = e.colno || '';
+          errorBanner.innerHTML += '<br/>• ' + msg + ' (' + file + ':' + line + ':' + col + ')';
+        }, true);
+      })();
+    </script>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <!-- FontAwesome 6 Icons for premium UI design -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <!-- Google AdSense — Auto Ads (apenas 1 script, sem push manual) -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1405601693512304"
+     crossorigin="anonymous"></script>
+
+    <style>
+      /* ── Dark theme para os popups do Leaflet ── */
+      .leaflet-popup-content-wrapper {
+        background: #0d1426 !important;
+        border: 1px solid rgba(59, 130, 246, 0.25) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.7), 0 0 0 1px rgba(59,130,246,0.1) !important;
+        padding: 0 !important;
+        color: #f8fafc !important;
+        backdrop-filter: blur(16px);
+      }
+      .leaflet-popup-content {
+        margin: 14px 16px !important;
+        font-family: Inter, system-ui, sans-serif !important;
+        color: #f8fafc !important;
+        line-height: 1.5 !important;
+      }
+      .leaflet-popup-tip {
+        background: #0d1426 !important;
+        box-shadow: none !important;
+      }
+      .leaflet-popup-tip-container {
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+      }
+      .leaflet-popup-close-button {
+        color: #64748b !important;
+        font-size: 18px !important;
+        padding: 6px 8px !important;
+        top: 4px !important;
+        right: 4px !important;
+        transition: color 0.2s;
+      }
+      .leaflet-popup-close-button:hover {
+        color: #ef4444 !important;
+        background: rgba(239,68,68,0.1) !important;
+        border-radius: 6px;
+      }
+
+      /* Controles do mapa (zoom) no tema escuro */
+      .leaflet-control-zoom a {
+        background: #0d1426 !important;
+        color: #94a3b8 !important;
+        border-color: rgba(255,255,255,0.1) !important;
+        font-size: 16px !important;
+      }
+      .leaflet-control-zoom a:hover {
+        background: rgba(59,130,246,0.15) !important;
+        color: #60a5fa !important;
+      }
+      .leaflet-control-attribution {
+        background: rgba(6,9,19,0.8) !important;
+        color: #475569 !important;
+        font-size: 10px !important;
+        backdrop-filter: blur(4px);
+      }
+      .leaflet-control-attribution a {
+        color: #60a5fa !important;
+      }
+
+      /* Remove borda azul padrão do container do mapa */
+      .leaflet-container {
+        background: #060913 !important;
+        outline: none !important;
+        font-family: Inter, sans-serif !important;
+      }
+
+      /* Animação para o ícone customizado */
+      .leaflet-marker-icon {
+        cursor: pointer !important;
+      }
+      .leaflet-marker-icon svg {
+        transition: transform 0.15s ease, filter 0.15s ease;
+        transform-origin: bottom center;
+      }
+      .leaflet-marker-icon:hover {
+        z-index: 1000 !important;
+      }
+      .leaflet-marker-icon:hover svg {
+        transform: scale(1.15) translateY(-3px);
+        filter: brightness(1.2);
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CxGUIzYq.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BB0h9jtU.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
